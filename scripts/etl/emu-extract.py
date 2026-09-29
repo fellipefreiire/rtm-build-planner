@@ -13,6 +13,8 @@ Output: src/data/emu.json
               (db/re/job_basepoints.yml; MaxHP = base x (1 + VIT/100) ...)
   statPoints  base level -> total status points (db/re/statpoint.yml;
               exp.conf has use_statpoint_table: yes)
+  mobDamageTaken  mob id -> % of damage it takes, when not 100 (db/re/mob_db.yml DamageTaken;
+              most MVPs take 50)
 """
 import json, os, re, sys, collections
 import yaml
@@ -95,8 +97,20 @@ for e in load('db/re/job_basepoints.yml').get('Body', []) or []:
         lst = [tab.get(l) for l in range(1, max(tab) + 1)]
         for j, on in (e.get('Jobs') or {}).items():
             if on and j in used_jobs: dst[j] = lst
+# ---- damage taken rate per mob (import overrides re). battle.cpp applies it last, to any damage:
+# damage = max(damage * DamageTaken / 100, 1). Only mobs in the dump and with a rate other than 100.
+mobs = {m['id'] for m in json.load(open(os.path.join(ROOT, 'src/data/mobs.json')))}
+dmg_taken = {}
+for p in ('db/re/mob_db.yml', 'db/import/mob_db.yml'):
+    if not os.path.exists(os.path.join(EMU, p)): continue
+    for e in load(p).get('Body', []) or []:
+        if e.get('Id') in mobs and 'DamageTaken' in e:
+            dmg_taken[str(e['Id'])] = e['DamageTaken']
+dmg_taken = {k: v for k, v in dmg_taken.items() if v != 100}
+
 out = {
     '_source': 'old rAthena emulator customized for RTM (~2024). scripts/etl/emu-extract.py',
+    'mobDamageTaken': dmg_taken,
     'classJob': class_job,
     'classJobUncertain': weak,
     'baseAspd': {j: base_aspd[j] for j in sorted(used_jobs) if j in base_aspd},

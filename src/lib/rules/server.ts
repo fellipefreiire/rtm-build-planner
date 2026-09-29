@@ -166,8 +166,15 @@ type EmuData = {
   catType: Record<string, string>
   baseHp: Record<string, number[]>
   baseSp: Record<string, number[]>
+  mobDamageTaken: Record<string, number>
 }
 const EMU = emu as unknown as EmuData
+
+/**
+ * % of the damage the mob takes (emulator `DamageTaken`, 100 when absent). Most MVPs take 50.
+ * battle.cpp:1832 applies it last, to any damage: max(damage × rate / 100, 1). [emu]
+ */
+export const mobDamageTaken = (id: number): number => EMU.mobDamageTaken[String(id)] ?? 100
 
 /** Internal emulator job for the RTM class. */
 export const emuJob = (cls: string): { job: string | null; doubtful: string | null } => ({

@@ -115,3 +115,15 @@ describe('two-handed weapon', () => {
     expect(withShield.skipped.some((s) => /two-handed/i.test(s.why))).toBe(true)
   })
 })
+
+describe('mob damage taken rate', () => {
+  it('most MVPs take 50% as the last layer; the dummy is untouched', () => {
+    const { b, sheet } = sheetOf()
+    const baph = mobBy('Baphomet')
+    const enc = simulate(b, sheet, baph)
+    const layer = enc.layers.find((l) => l.label === 'target damage taken')
+    expect(layer?.mult).toBe(0.5)
+    expect(enc.layers[enc.layers.length - 1]).toBe(layer)
+    expect(simulate(b, sheet, mobBy('Average Dummy')).layers.some((l) => l.label === 'target damage taken')).toBe(false)
+  })
+})

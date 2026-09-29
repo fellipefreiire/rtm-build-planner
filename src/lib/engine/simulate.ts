@@ -1,7 +1,7 @@
 // simulate: StatSheet + Mob -> Encounter. Pure.
 import { Build, Mob, Prov, Qty, qty } from '@/lib/types'
 import { StatSheet } from './sheet'
-import { CRIT_BASE, CRIT_CAP, defMultiplier, elementMultiplier, penEffect } from '@/lib/rules/server'
+import { CRIT_BASE, CRIT_CAP, defMultiplier, elementMultiplier, mobDamageTaken, penEffect } from '@/lib/rules/server'
 
 export type Layer = { label: string; mult: number; why: string }
 
@@ -65,6 +65,11 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
     { label: 'target DEF after pen', mult: defCut.v, why: `DEF ${mob.def} − pen ${sheet.defPen.v} (${(penEff * 100).toFixed(0)}%) → ${mobDefLeft.toFixed(0)}` },
     { label: 'weapon element', mult: elemAtk, why: `${sheet.weaponElement.v} (${sheet.weaponElement.from}) vs ${mob.element} ${mob.elv}` },
   ]
+  // last multiplier of battle_calc_damage (battle.cpp:1832): most MVPs take 50% [emu]
+  const mobTaken = mobDamageTaken(mob.id)
+  if (mobTaken !== 100) {
+    layers.push({ label: 'target damage taken', mult: mobTaken / 100, why: `${mob.name} takes ${mobTaken}% of the damage (DamageTaken, battle.cpp:1832) [emu ~2024]` })
+  }
   const index = layers.reduce((a, l) => a * l.mult, 1)
 
   let damage: Qty | null = null
