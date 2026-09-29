@@ -1,0 +1,32 @@
+{
+  "name": "rtm-build-planner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "data": "node scripts/etl/build-data.mjs",
+    "icons": "node scripts/fetch-icons.mjs",
+    "skill-icons": "node scripts/fetch-skill-icons.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "npx serve out",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "^16.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "description": "Build planner and damage simulator for Return to Morroc: Refuge (Ragnarok Online private server)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

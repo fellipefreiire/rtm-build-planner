@@ -1,0 +1,53 @@
+// Manual corrections to the dump, based on in-game observation.
+// Every entry needs a `why`; without it, it becomes an unexplained number.
+export const ITEM_OVERRIDES = {
+  'Caelum of the Sun': {
+    cardSlots: 2,
+    refinable: true,
+    why: 'in-game it is refinable and has 2 slots; the 900xxx record was incomplete [player report 2026-09-18]',
+  },
+  // Baphomet: the rework (Leech Power +3% on the set, Roaring -1 s on the card) is in the dump since 2026-09-28
+  'Fanatic Servant Gloves': {
+    desc: [['On hit: 1% chance\nper refine to leech HP,\nrecovering 1% of the\ndamage per refine', 'Leech Rate +1% per refine\nLeech Power +1% per refine']],
+    why: 'the tooltip only mentions a leech chance; in-game it gives Leech Rate and Leech Power +1% per refine [measured in-game 2026-09-26]',
+  },
+  'Living Reaper': {
+    desc: [['Boost Critical Damage by 5%.', 'Critical Damage +5%']],
+    why: 'the text "Boost Critical Damage by 5%" does not match the parser format; the effect is Critical Damage +5% [db]',
+  },
+  'Sarah Irine Card': {
+    desc: [
+      ['Weapon Attack Power +3%', 'ATK +3%'],
+      ['+10% Damage vs Neutral/Poison/Ghost/Undead/Dark\n-10% Damage vs Holy',
+        ['Neutral', 'Poison', 'Ghost', 'Undead', 'Dark'].map((e) => `Damage against ${e} element +10%`).join('\n') + '\nDamage against Holy element -10%'],
+    ],
+    why: 'the parser cannot read "vs Neutral/Poison/..." on one line; split per element. "Weapon Attack Power" treated as ATK% (approximation) [db]',
+  },
+  'Heir to the King Boots': {
+    desc: [['Physical and magical DMG\nvs all sizes +1% per refine', 'Damage +1% per refine']],
+    why: '"vs all sizes" applies to any target: Damage +1% per refine [db]',
+  },
+  'Heir to the King Pendant': {
+    desc: [['Physical and magical DMG\nvs all elements +1% per\nrefine', 'Damage +1% per refine']],
+    why: '"vs all elements" applies to any target: Damage +1% per refine [db]',
+  },
+  'Evil Wing Ears': {
+    desc: [['15% chance to leech 3% physical damage done as HP', 'Leech Rate +15%\nLeech Power +3%']],
+    why: '"15% chance to leech 3%": @battlestats on 2026-09-28 only adds up to Leech Power 33 with this +3 [measured in-game 2026-09-28]',
+  },
+  'Sage Ring': {
+    refinable: false,
+    why: 'in-game it is not refinable, even though the dump says refine=1 [player report 2026-09-18]',
+  },
+}
+
+/**
+ * The dump sets `refine: 0` on gear whose own description says "Per Refine".
+ * Cards are excluded: their text refers to the refine of the host item.
+ */
+export function isRefinable(it) {
+  const flag = !!it.refine
+  if (flag || it.grp === 'Card') return flag
+  return /per\s+(\d+\s+)?(total\s+set\s+)?refine/i.test(String(it.desc || ''))
+}
+
