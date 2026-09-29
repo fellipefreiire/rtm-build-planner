@@ -69,6 +69,17 @@ describe('random options', () => {
     expect(optionTableFor(find('Caelum of the Sun'), 'upper')).toBeNull()
   })
 
+  it('runes: every rune that drops rolls the manual line', () => {
+    const t = optionTableFor(find('Uruz Rune of Freedom'), 'rune')
+    expect(t?.group).toBe('rune')
+    // Othila Rune of Blood with LUK +2 [player report 2026-09-28]
+    expect(t?.lines[0].find((x) => x.id === 'luk')?.max).toBe(2)
+    // no drop in the emulator, rolls in-game [player report 2026-09-28]
+    expect(optionTableFor(find('Othila Rune of Blood'), 'rune')?.group).toBe('rune')
+    // not dropped: comes without options
+    expect(optionTableFor(find('Ante Rune of Payout'), 'rune')).toBeNull()
+  })
+
   it('JSON round trip keeps the options; old link still imports', () => {
     const b = sample()
     b.slots.armor!.opts = [{ key: 'luk', v: 2 }, { key: 'hp_pct', v: 4 }, { key: 'mag_taken', v: 2 }]

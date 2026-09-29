@@ -168,12 +168,21 @@ export const FIXED: Record<string, OptionTable> = {
   },
 }
 
+/**
+ * Runes: the emulator's mob_db gives every rune drop `RandomOptionGroup: manual` (one line, a stat +1) [emu].
+ * The emulator is outdated here: Othila Rune of Blood has no drop there and rolls in-game
+ * [player report 2026-09-28], so every rune with a drop in the dump gets the table.
+ * The range is not the emulator's +1 either: an Othila Rune of Blood rolled LUK +2 [player report 2026-09-28].
+ * Upper bound 2 is the highest seen, not confirmed as the cap.
+ */
+const RUNE: OptionTable = { group: 'rune', prov: 'reported', lines: [stats(1, 2)] }
+
 /** The picks that apply to the table: for fixed tables, always every line. */
 export function effectivePicks(table: OptionTable, picks: ({ key: string; v: number } | null)[] | undefined) {
   return table.fixed ? table.lines.map((l) => ({ key: l[0].id, v: l[0].max })) : picks ?? []
 }
 
-/** Table that applies to the item in this slot, or null (headgear, costume, pet, rune, card…). */
+/** Table that applies to the item in this slot, or null (costume, pet, card, rune without options…). */
 export function optionTableFor(item: Item | undefined, slot: SlotId): OptionTable | null {
   if (!item || item.grp === 'Card') return null
   if (FIXED[item.name]) return FIXED[item.name]
@@ -189,6 +198,7 @@ export function optionTableFor(item: Item | undefined, slot: SlotId): OptionTabl
     case 'shadowArmor': case 'shadowShoes': case 'shadowGloves': case 'shadowAcc': return TABLES.shadow
     case 'upper': case 'mid': case 'lower': return TABLES.headgear
     case 'gem': return TABLES.gem
+    case 'rune': return item.cat === 'Rune' ? RUNE : null
     case 'weapon': { const g = WEAPON_BY_CAT[item.cat]; return g ? TABLES[g] : null }
     default: return null
   }
