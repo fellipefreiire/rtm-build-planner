@@ -164,6 +164,12 @@ export function runRotation(i: RotationInput): RotationResult {
       // +1 hit per stack; Roaring does not consume the stacks [player report 2026-09-28]
       hits = 1 + stacks
       if (!cr) notes.push('without Combo Ready: reduced damage')
+      // Roaring consumes Finisher Ready [player report 2026-09-30]
+      if (fr) {
+        frUntil = start
+        const last = frSpans[frSpans.length - 1]
+        if (last && last.to > start) last.to = start
+      }
     } else if (key === REAPING) {
       mult = 1 + 0.05 * stacksBefore
       // Finisher Ready (Hellraiser): Reaping goes straight to 5 [player report 2026-09-28]

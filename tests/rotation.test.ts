@@ -85,4 +85,11 @@ describe('rotation: state lanes', () => {
     const r = run([HR, RS])
     expect(r.lanes.finisherReady[0].to - r.lanes.finisherReady[0].from).toBeCloseTo(5, 6)
   })
+  it('Roaring consumes Finisher Ready: the lane ends at the Roaring and the next Reaping does not jump to 5', () => {
+    const r = run([HR, SR, RO, RS])
+    expect(r.events[2].finisherReady).toBe(true)
+    expect(r.lanes.finisherReady[0].to).toBeCloseTo(r.events[2].start, 6)
+    expect(r.events[3].finisherReady).toBe(false)
+    expect(r.events[3].stacksAfter).toBe(1)
+  })
 })
