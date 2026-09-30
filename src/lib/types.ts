@@ -136,6 +136,8 @@ export type Skill = {
   sp: number[] | number | null
   needs: { name: string; lv: number }[]
   prose: string
+  /** range in cells per level (range >= 4 = ranged attack) */
+  range?: number[] | null
   damage: SkillFormula | null
 }
 

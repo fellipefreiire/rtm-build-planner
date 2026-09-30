@@ -253,6 +253,8 @@ function main() {
       sp: s.sp ?? null,
       needs: (s.needs || []).map(([n, lv]) => ({ name: n, lv })),
       prose: (s.prose || s.desc || '').trim(),
+      /** range in cells per level; range >= 4 makes a skill a ranged attack (battle.cpp battle_range_type) */
+      range: Array.isArray(s.range) ? s.range : s.range != null ? [s.range] : null,
       damage: f,
     })
   }

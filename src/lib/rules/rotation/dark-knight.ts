@@ -1,5 +1,6 @@
 // Dark Knight rotation: Combo Ready, Harvest (damage from missing HP), Black Metal and gear autocasts.
 // Rules from the skill texts in the db; what the text does not say is marked [estimated].
+import { emuHits } from '@/lib/rules/server'
 import { equippedNames, learned, RotationRules } from './types'
 
 const DEVIL_RAID = 'dark-knight/devil-raid'
@@ -13,14 +14,21 @@ const CHILLING_FROST = 'dark-knight/chilling-frost'
 /** Combo Ready from Devil Raid and Vengeance: the text says "enables Combo Ready for follow-up" with no duration [estimated] */
 const CR_TIME = 4
 
-/** HP cost or requirement, from the skill text: shown as a note (HP is the Simulator input, it does not move) */
-const HP_NOTE: Record<string, (lv: number) => string> = {
-  [NIGHT_MENACE]: () => 'costs 20% of current HP',
-  [FATAL_MENACE]: () => 'requires extra 10% of current HP',
-  [CONFLAGRATION]: (lv) => `requires ${3 * lv}% of current HP`,
-  [DEVIL_RAID]: () => 'requires 15% of current HP',
-  [VENGEANCE]: () => 'requires 5% of current HP',
-  [CHILLING_FROST]: () => 'requires 25% of current HP',
+/**
+ * HP each skill takes from CURRENT HP, from the skill text. Harvest reads the HP AFTER the skill pays it:
+ * measured in-game 2026-09-30 (lv47), Night Menace at full HP in Harvest hit 3250 — the formula at 80% HP
+ * gives ~3350, at 100% ~2390. The HP input of the Simulator is the HP before the cast; it does not move
+ * between steps (costs, leech and regen are not simulated).
+ */
+const HP_COST: Record<string, (lv: number) => number> = {
+  [NIGHT_MENACE]: () => 20,           // "Costs 20% of current HP to cast"
+  [FATAL_MENACE]: () => 10,           // "Requires extra 10% Current HP to cast"
+  [CONFLAGRATION]: (lv) => 3 * lv,    // "Requires 3% Current HP per level"
+  [VENGEANCE]: () => 5,               // "Requires 5% Current HP" (emulator: HpRateCost 5)
+  [CHILLING_FROST]: () => 25,         // "Requires 25% Current HP"
+  // Devil Raid: "Requires 15% Current HP"; the emulator charged 10% of MaxHP. Measured at full HP in Harvest
+  // 2026-09-30: 1350, which the formula reaches with ~10% [estimated]
+  [DEVIL_RAID]: () => 10,
 }
 
 export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
@@ -31,11 +39,17 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
   cast: (c) => {
     const cr = c.active('comboReady')
     const harvest = !!c.toggles.harvest
-    const missing = Math.max(0, 100 - c.hpPct)
+    const cost = HP_COST[c.key]?.(c.lv) ?? 0
+    // HP after paying the skill's own cost, in % of MaxHP
+    const hpAfter = c.hpPct * (1 - cost / 100)
+    const missing = Math.max(0, Math.round((100 - hpAfter) * 10) / 10)
     const str = c.sheet.stats.str
     const maxHp = c.sheet.maxHp?.v ?? 0
     const notes: string[] = []
-    let hits = 1
+    // Night Menace, Devil Raid and Vengeance hit twice (HitCount 2 in the emulator); Night Menace measured
+    // in-game 2026-09-30: 2240 without Combo Ready and 5200 with it, against 2270 and 5276 with 2 hits
+    let hits = emuHits(c.skill.icon)
+    if (hits > 1) notes.push(`${hits} hits [emu]`)
     let mult = 1
     let pctAdd = 0
     const add = (v: number, why: string) => { pctAdd += v; notes.push(`+${Math.round(v)}% ${why}`) }
@@ -62,8 +76,7 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
     } else if (c.key === CHILLING_FROST) {
       if (harvest && missing) add(missing, `Harvest (base +1% × ${missing}% HP missing) [estimated]`)
     }
-    const hp = HP_NOTE[c.key]
-    if (hp) notes.push(hp(c.lv))
+    if (cost) notes.push(`costs ${cost}% of current HP: HP ${c.hpPct}% → ${Math.round(hpAfter)}% when it hits`)
     return { hits, mult, pctAdd, notes }
   },
 

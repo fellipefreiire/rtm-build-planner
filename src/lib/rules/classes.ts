@@ -150,6 +150,8 @@ const REVENANT: ClassRules = {
 // (Combo Ready, Harvest by missing HP, autocasts) live in rules/rotation/dark-knight.ts.
 const DARK_KNIGHT: ClassRules = {
   ...GENERIC('Dark Knight'),
+  // same as Revenant: in-game 2026-09-30 (lv47) HP 1437 against 1307 from the formula (×1.10) and HIT 344 against 319 (+25)
+  innate: { hpRate: 10, hit: 25, pd: 0, why: 'measured in-game 2026-09-30 at lv47: HP = formula × 1.10 and HIT = formula + 25, as on Revenant' },
   simBuffs: [
     { id: 'harvest', skill: 'dark-knight/harvest', label: 'Harvest', default: true, why: 'STR and INT +1 per level; skills scale with missing HP (set the HP of the rotation). Blocks healing from skills. [db]' },
     { id: 'blackMetal', skill: 'dark-knight/black-metal', label: 'Black Metal', default: true, why: 'Party ATK/MATK +10; Devil Raid damage is doubled. [db]' },

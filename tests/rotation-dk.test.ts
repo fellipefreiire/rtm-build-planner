@@ -48,10 +48,11 @@ describe('rotation: Dark Knight', () => {
     expect(on.damage / off.damage).toBeLessThan(2.05)
   })
 
-  it('Harvest at 50% HP doubles Night Menace: ×(1 + 2% × 50)', () => {
+  it('Harvest: Night Menace ×(1 + 2% × HP missing after its own 20% cost)', () => {
+    // full HP → 80% when it hits (×1.4); 50% → 40% (×2.2)
     const full = run([NM], { harvest: true }, 100).events[0]
     const half = run([NM], { harvest: true }, 50).events[0]
-    expect(half.damage / full.damage).toBeCloseTo(2, 6)
+    expect(half.damage / full.damage).toBeCloseTo(2.2 / 1.4, 6)
   })
 
   it('Forgotten Egnigem and Devil Gem: Devil Raid casts Vengeance twice, Night Menace casts Fatal Menace, with no time', () => {
@@ -72,5 +73,30 @@ describe('rotation: Dark Knight', () => {
     const lin = lineageSkills('Night Raven')
     const b: Build = { ...dk(), cls: 'Night Raven', skills: Object.fromEntries(lin.slice(0, 2).map((k) => [k, 1])) }
     expect(rotationRulesFor('Night Raven').palette(b, lin)).toEqual(lin.slice(0, 2))
+  })
+
+  it('matches the in-game reading of 2026-09-30 (lv47 build, Average Dummy, no buffs)', () => {
+    const b: Build = migrateIds(JSON.parse(readFileSync(new URL('./fixtures-data/dark-knight-lv47-2026-09-30.json', import.meta.url), 'utf8')))
+    const sheet = computeSheet({ ...b, skillKey: null }, byId, null, rulesFor('Dark Knight'), {})
+    expect(sheet.hit.v).toBe(344)
+    expect(Math.round(sheet.maxHp!.v)).toBe(1437)
+    const off = { harvest: false, blackMetal: false, knightRitual: false }
+    const nm = run([NM], off, 100, b).events[0].damage
+    const nmCr = run([DR, NM], off, 100, b).events[1].damage
+    // "around" in-game numbers: within 3%
+    expect(Math.abs(nm / 2240 - 1)).toBeLessThan(0.03)
+    expect(Math.abs(nmCr / 5200 - 1)).toBeLessThan(0.03)
+    // Devil Raid (range 9) is ranged: without the build's Melee +15%
+    expect(Math.abs(run([DR], off, 100, b).events[0].damage / 1200 - 1)).toBeLessThan(0.03)
+  })
+
+  it('Harvest reads the HP after the skill pays its own cost (in-game 2026-09-30, lv47, full HP)', () => {
+    const b: Build = migrateIds(JSON.parse(readFileSync(new URL('./fixtures-data/dark-knight-lv47-2026-09-30.json', import.meta.url), 'utf8')))
+    const hv = { harvest: true, blackMetal: false, knightRitual: false }
+    const within = (x: number, game: number) => expect(Math.abs(x / game - 1)).toBeLessThan(0.04)
+    within(run([DR], hv, 100, b).events[0].damage, 1350)
+    within(run([NM], hv, 100, b).events[0].damage, 3250)
+    // right after Devil Raid (which took ~10% of the HP): Night Menace with Combo Ready
+    within(run([DR, NM], hv, 90, b).events[1].damage, 9026)
   })
 })

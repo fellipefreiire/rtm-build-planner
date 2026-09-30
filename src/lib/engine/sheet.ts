@@ -64,6 +64,8 @@ export type StatSheet = {
   /** lowercase skill name: the skill_dmg key */
   skillName: string | null
   canCrit: boolean
+  /** the chosen skill's attack range: range >= 4 cells is ranged (battle.cpp battle_range_type) [emu] */
+  rangeType: 'melee' | 'ranged'
   skillParts: Extra[]
   /**
    * The same numbers as the in-game status window, split into `base + gear`.
@@ -483,6 +485,9 @@ export function computeSheet(
     skillParts,
     skillName: skill ? skill.name.toLowerCase() : null,
     canCrit: skill?.damage?.canCrit ?? true,
+    // skillrange_by_distance does not include players (conf/battle/skill.conf: 14), so the skill's range decides;
+    // Devil Raid (range 9) measured in-game 2026-09-30 without the build's Melee +15%
+    rangeType: (skill?.range?.[Math.min(ctxSkillLv || 1, skill.range.length) - 1] ?? 1) >= 4 ? 'ranged' : 'melee',
     unparsed,
     skipped,
     split: {

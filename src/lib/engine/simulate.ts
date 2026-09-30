@@ -53,13 +53,15 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
     : Math.min(1, Math.max(0, (sheet.critRate.v - mobLuk / 5) / 100))
   const critAvg = critChance * critMult + (1 - critChance)
   const boost = sheet.skillName ? (sc.skill_dmg?.[sheet.skillName] ?? 0) : 0
-  const melee = sheet.totals.pct.melee_dmg ?? 0
+  // Melee% only on short-range attacks; a skill with range >= 4 is ranged and takes Ranged% instead
+  const ranged = sheet.rangeType === 'ranged'
+  const melee = ranged ? (sheet.totals.pct.ranged_dmg ?? 0) : (sheet.totals.pct.melee_dmg ?? 0)
 
   const layers: Layer[] = [
     { label: 'ATK', mult: sheet.atk.v, why: sheet.atk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
-    { label: 'melee', mult: 1 + melee / 100, why: `${melee}% melee damage` },
+    { label: ranged ? 'ranged' : 'melee', mult: 1 + melee / 100, why: ranged ? `${melee}% ranged damage (skill range ≥ 4: melee bonuses do not apply)` : `${melee}% melee damage` },
     { label: 'critical', mult: critAvg, why: `${(critChance * 100).toFixed(0)}% chance (${sheet.critRate.v >= CRIT_CAP ? `crit ${sheet.critRate.v.toFixed(1)} ≥ ${CRIT_CAP}: always` : `crit ${sheet.critRate.v.toFixed(1)} − target LUK ${mobLuk}/5`}) × (1.4 + ${sheet.critDmg.v}% crit damage)` },
     { label: 'race/size/element pools', mult: 1 + pools / 100, why: `${pools}% vs ${mob.race} ${mob.size} ${mob.element}` },
     { label: 'target DEF after pen', mult: defCut.v, why: `DEF ${mob.def} − pen ${sheet.defPen.v} (${(penEff * 100).toFixed(0)}%) → ${mobDefLeft.toFixed(0)}` },

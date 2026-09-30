@@ -18,6 +18,8 @@ Output: src/data/emu.json
   skillAcd    internal skill name (the dump's `icon`) -> after cast delay in ms, a number or a
               per-level list (db/re/skill_db.yml AfterCastActDelay). RTM skills reuse the
               internal names, so this is the delay of the skill that carries the icon
+  skillHits   internal skill name -> HitCount of Multi_Hit skills with more than 1 hit. rAthena
+              multiplies the damage by the hit count (damage_div_fix)
 """
 import json, os, re, sys, collections
 import yaml
@@ -113,13 +115,16 @@ dmg_taken = {k: v for k, v in dmg_taken.items() if v != 100}
 
 # ---- after cast delay per internal skill name (import overrides re); only icons used by the dump
 icons = {r[ICON] for r in skills['rows'] if r[ICON]}
-skill_acd = {}
+skill_acd, skill_hits = {}, {}
 for p in ('db/re/skill_db.yml', 'db/import/skill_db.yml'):
     if not os.path.exists(os.path.join(EMU, p)): continue
     for e in load(p).get('Body', []) or []:
         n, d = e.get('Name'), e.get('AfterCastActDelay')
-        if n not in icons or d is None: continue
-        skill_acd[n] = [x['Time'] for x in sorted(d, key=lambda x: x['Level'])] if isinstance(d, list) else d
+        if n not in icons: continue
+        if d is not None:
+            skill_acd[n] = [x['Time'] for x in sorted(d, key=lambda x: x['Level'])] if isinstance(d, list) else d
+        h = e.get('HitCount')
+        if e.get('Hit') == 'Multi_Hit' and isinstance(h, int) and h > 1: skill_hits[n] = h
 
 out = {
     '_source': 'old rAthena emulator customized for RTM (~2024). scripts/etl/emu-extract.py',
@@ -133,6 +138,7 @@ out = {
     'baseHp': base_hp,
     'baseSp': base_sp,
     'skillAcd': skill_acd,
+    'skillHits': skill_hits,
 }
 json.dump(out, open(os.path.join(ROOT, 'src/data/emu.json'), 'w'), ensure_ascii=False, indent=1, sort_keys=True)
 print(f"HP base: {len(base_hp)} jobs, SP base: {len(base_sp)} jobs; Rebellion 137 = {base_hp.get('Rebellion', [None]*137)[136]} HP / {base_sp.get('Rebellion', [None]*137)[136]} SP")

@@ -161,6 +161,8 @@ export function maxHpSp(
 type EmuData = {
   /** internal skill name (the dump's `icon`) -> after cast delay in ms, flat or per level */
   skillAcd: Record<string, number | number[]>
+  /** internal skill name -> hit count of multi-hit skills (damage × hits) */
+  skillHits: Record<string, number>
   classJob: Record<string, string>
   classJobUncertain: Record<string, string>
   baseAspd: Record<string, Record<string, number>>
@@ -177,6 +179,9 @@ const EMU = emu as unknown as EmuData
  * battle.cpp:1832 applies it last, to any damage: max(damage × rate / 100, 1). [emu]
  */
 export const mobDamageTaken = (id: number): number => EMU.mobDamageTaken[String(id)] ?? 100
+
+/** Hits of the emulator skill that carries this icon; rAthena multiplies the damage by it. [emu] */
+export const emuHits = (icon: string | null | undefined): number => (icon ? EMU.skillHits?.[icon] : undefined) ?? 1
 
 /** After cast delay (ms) of the emulator skill that carries this icon; null when the emulator has none. [emu] */
 export function emuAcdMs(icon: string | null | undefined, lv: number): number | null {
