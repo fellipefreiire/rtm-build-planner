@@ -60,7 +60,10 @@ export type Cond =
   /** `members`: names of all pieces; the bonus only applies with all of them equipped */
   | { t: 'set_bonus'; set: string; members: string[] }
   | { t: 'per_refine'; each: number }
-  | { t: 'per_set_refine'; each: number }
+  /** with `set`/`members`: only with the full set, × (sum of the pieces' refine / each) */
+  | { t: 'per_set_refine'; each: number; set?: string; members?: string[] }
+  /** "With two of these equipped": N copies of the same item (cards) */
+  | { t: 'copies_min'; n: number }
   | { t: 'per_stat'; stat: StatKey; each: number }
   /** × allocated skill level; with several skills, the HIGHEST level counts (one or the other, not the sum) */
   | { t: 'per_skill_lv'; skills: string[] }

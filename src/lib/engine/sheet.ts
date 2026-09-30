@@ -12,6 +12,9 @@ import { effectivePicks, optionTableFor, resolvePick } from '@/lib/rules/random-
 import { dreamById } from '@/lib/rules/dream-enchants'
 import { sealResult, TEMPLES } from '@/lib/rules/seals'
 
+/** MaxHP ceiling before items that raise it (`max_hp: 50000`, conf/battle/player.conf:89) [emu 2024] */
+export const HP_CAP = 50000
+
 export type Totals = {
   flat: Record<string, number>
   pct: Record<string, number>
@@ -75,7 +78,8 @@ export type StatSheet = {
 
 const CONDITIONAL_SKIP: Record<string, string> = {
   set_pieces: 'depends on the set piece count, which the dump does not provide',
-  per_set_refine: 'depends on the set total refine, which the dump does not provide',
+  per_set_refine: 'depends on the set total refine, and the text does not say which set',
+  copies_min: 'needs more copies of this item equipped',
 }
 
 /** Set bonus dedupe key: the same bonus is repeated on every piece. */
@@ -181,6 +185,35 @@ export function computeSheet(
           const missing = m.cond.members.filter((n) => !wearing.has(n))
           if (missing.length) {
             skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
+            continue
+          }
+          addMod(totals, m, 1)
+          continue
+        }
+        if (m.cond.t === 'per_set_refine' && m.cond.members) {
+          // same dedupe as the set bonus: every piece repeats the line
+          const k = `${m.cond.set}|refine|${m.key}|${m.value}|${m.pct}|${m.raw}`
+          if (seenSetBonus.has(k)) continue
+          seenSetBonus.add(k)
+          const members = m.cond.members
+          const missing = members.filter((n) => !wearing.has(n))
+          if (missing.length) {
+            skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
+            continue
+          }
+          const total = equipped.filter((e) => members.includes(e.item.name)).reduce((a, e) => a + e.refine, 0)
+          const mult = Math.floor(total / Math.max(1, m.cond.each))
+          if (mult) addMod(totals, m, mult)
+          continue
+        }
+        if (m.cond.t === 'copies_min') {
+          // "With two of these equipped": counts once, and only with N copies of the same item
+          const k = `copies|${it.id}|${m.key}|${m.raw}`
+          if (seenSetBonus.has(k)) continue
+          seenSetBonus.add(k)
+          const copies = equipped.reduce((a, e) => a + (e.item.id === it.id ? 1 : 0) + e.cards.filter((c) => c.id === it.id).length, 0)
+          if (copies < m.cond.n) {
+            skipped.push({ raw: m.raw, itemName: it.name, why: `needs ${m.cond.n} copies equipped (has ${copies})` })
             continue
           }
           addMod(totals, m, 1)
@@ -307,6 +340,12 @@ export function computeSheet(
   const refineDef = Math.floor((equipped.reduce((a, e) => a + (ARMOR_SLOTS.has(e.slot) && e.item.refinable ? e.refine * 50 : 0), 0) + 50) / 100)
   const gearDef = equipped.reduce((a, e) => a + e.item.def, 0) + refineDef
   const gearMdef = equipped.reduce((a, e) => a + e.item.mdef, 0)
+  const defTotal = gearDef + flat('def') + gearDef * (pct('def') / 100)
+  const mdefTotal = gearMdef + flat('mdef')
+  // End of Kings: "Adds ATK equal to 10% of your total DEF" — read as the equipment DEF shown here, added as
+  // flat gear ATK before ATK% [db, estimated reading]
+  const atkFromDef = Math.floor(defTotal * (pct('atk_from_def') + flat('atk_from_def')) / 100)
+  const matkFromMdef = Math.floor(mdefTotal * (pct('matk_from_mdef') + flat('matk_from_mdef')) / 100)
 
   const lv = build.baseLv
   const sAtk = statusAtk(stats, lv)
@@ -317,7 +356,8 @@ export function computeSheet(
   const bFlee = baseFlee(stats, lv)
   const bCrit = baseCrit(stats)
   const bPd = basePerfectDodge(stats)
-  const sDef = softDef(stats, lv)
+  // "Soft DEF +1%" (End of Kings, per total set refine) scales the VIT-based soft DEF
+  const sDef = Math.floor(softDef(stats, lv) * (1 + (pct('soft_def') + flat('soft_def')) / 100))
   const sMdef = softMdef(stats, lv)
   const gearCrit = flat('crit_rate') + pct('crit_rate')
   // "Total Critical Rate +N%" is bCriticalRate: multiplies base + gear, before
@@ -346,11 +386,11 @@ export function computeSheet(
   const wEq = equipped.find((e) => e.slot === 'weapon')
   const refineAtk = Math.floor((wEq?.item.wlv ?? 0) * 50 * (wEq?.refine ?? 0) / 100)
   // in-game window: left = status ATK; right = weapon + refine + gear ATK (without mastery)
-  const shownGear = weaponAtk + refineAtk + flat('atk')
+  const shownGear = weaponAtk + refineAtk + flat('atk') + atkFromDef
   // damage: status ATK counts 2× (battle_calc_status_attack); the weapon gains ATK × STR/200
   // (base_stat_bonus, without the variance, which is symmetric); mastery adds without element
   const weaponPart = weaponAtk * (1 + stats.str / 200) + refineAtk
-  const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk')) * (1 + pct('atk') / 100)
+  const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk') + atkFromDef) * (1 + pct('atk') / 100)
   const inn = rules.innate
   const bHitT = bHit + pSum('hit') + (inn?.hit ?? 0)
   const bFleeT = bFlee + pSum('flee')
@@ -385,7 +425,13 @@ export function computeSheet(
   }
 
   const shieldExtra = rules.shield(ctx)
-  const hp = maxHpSp('hp', build.cls, lv, stats.vit, { flat: flat('hp'), pct: pct('hp') }, inn?.hpRate ?? 0)
+  const hpRaw = maxHpSp('hp', build.cls, lv, stats.vit, { flat: flat('hp'), pct: pct('hp') }, inn?.hpRate ?? 0)
+  // MaxHP ceiling: max_hp 50000 in the emulator (conf/battle/player.conf:89); Valhalla Knight Card ×2 and
+  // Heimdall's Legacy raise it, which confirms the server has one [emu 2024]
+  const hpCap = HP_CAP + flat('hp_limit')
+  const hp = hpRaw && hpRaw.v > hpCap
+    ? { ...hpRaw, v: hpCap, why: `${hpRaw.why} → ${Math.trunc(hpRaw.v)} capped at ${hpCap} (MaxHP limit ${HP_CAP}${flat('hp_limit') ? ` + ${flat('hp_limit')}` : ''}) [emu]` }
+    : hpRaw
   const sp = maxHpSp('sp', build.cls, lv, stats.int, { flat: flat('sp'), pct: pct('sp') }, 0)
 
   const spentStats = STATS.reduce((a, s) => a + statCostTotal(statsBase[s]), 0)
@@ -413,10 +459,10 @@ export function computeSheet(
     },
     totals,
     equipped,
-    atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, `${pct('atk')}%`),
-    matk: qty((sMatk + weaponMatk + refineAtk + flat('matk')) * (1 + pct('matk') / 100), 'emu', `status MATK ${sMatk}`, `weapon ${weaponMatk} + refine ${refineAtk}`, `gear ${flat('matk')}`, `${pct('matk')}%`),
-    def: qty(gearDef + flat('def') + gearDef * (pct('def') / 100), 'derived', 'gear DEF + mods'),
-    mdef: qty(gearMdef + flat('mdef'), 'derived', 'gear MDEF + mods'),
+    atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', `${pct('atk')}%`),
+    matk: qty((sMatk + weaponMatk + refineAtk + flat('matk') + matkFromMdef) * (1 + pct('matk') / 100), 'emu', `status MATK ${sMatk}`, `weapon ${weaponMatk} + refine ${refineAtk}`, `gear ${flat('matk')}`, matkFromMdef ? `${matkFromMdef} from MDEF` : '', `${pct('matk')}%`),
+    def: qty(defTotal, 'derived', 'gear DEF + mods'),
+    mdef: qty(mdefTotal, 'derived', 'gear MDEF + mods'),
     maxHp: hp ? qty(hp.v, 'emu', hp.why) : null,
     maxSp: sp ? qty(sp.v, 'emu', sp.why) : null,
     critRate: qty(critTotal, 'emu', `base ${bCrit} (LUK) [emu]`, `gear ${gearCrit}`, critMult !== 100 ? `× ${critMult}% (Total Critical Rate)` : '', pWhy('crit')),
@@ -452,7 +498,7 @@ export function computeSheet(
       },
       matk: {
         base: sMatk,
-        gear: weaponMatk + refineAtk + flat('matk'),
+        gear: weaponMatk + refineAtk + flat('matk') + matkFromMdef,
         why: `status MATK = INT + INT/2 + DEX/5 + LUK/3 + lv/4 + INT/10 + DEX/10 [emu, pc.hpp:1149] · weapon ${weaponMatk} + refine ${refineAtk} (@battlestats shows "MATK 10" on Ominous +7) + ${flat('matk')} from mods`,
       },
       mdef: { base: sMdef, gear: gearMdef + flat('mdef'), why: 'soft MDEF = INT + lv/4 + 5 per 10 VIT + (DEX+VIT)/5 [emu]' },

@@ -35,6 +35,26 @@ export const ITEM_OVERRIDES = {
     desc: [['15% chance to leech 3% physical damage done as HP', 'Leech Rate +15%\nLeech Power +3%']],
     why: '"15% chance to leech 3%": @battlestats on 2026-09-28 only adds up to Leech Power 33 with this +3 [measured in-game 2026-09-28]',
   },
+  Tartaros: {
+    desc: [['Leech: 100% chance, 5% of\nthe damage dealt', 'Leech Rate +100%\nLeech Power +5%']],
+    why: '"Leech: 100% chance, 5% of the damage dealt" is Leech Rate 100% and Leech Power 5% [db]',
+  },
+  ...Object.fromEntries(['Armor', 'Shield', 'Boots', 'Pendant'].map((piece) => [`End of Kings ${piece}`, {
+    desc: [
+      ['Adds ATK equal to 10% of\nyour total DEF\nAdds MATK equal to 10% of\nyour total MDEF', 'ATK from DEF +10%\nMATK from MDEF +10%'],
+      ['DEF +1% and Soft DEF\n+1%', 'DEF +1%\nSoft DEF +1%'],
+      ['Neutral damage reduction\nfrom all sizes +1% per refine', 'Neutral Resistance +1% per refine'],
+    ],
+    why: 'the set text ("Adds ATK equal to 10% of your total DEF", "DEF +1% and Soft DEF +1%" per total set refine) and the boots piece ("Neutral damage reduction from all sizes") rewritten in the parser format; "total DEF" read as the equipment DEF the engine shows [db, estimated reading]',
+  }])),
+  'Valhalla Knight Card': {
+    desc: [['raises your MaxHP limit by 5,000', 'MaxHP Limit +5000']],
+    why: 'the comma in "5,000" split the line; the effect is MaxHP ceiling +5,000 with two copies [db]',
+  },
+  "Heimdall's Legacy": {
+    desc: [['Raises your MaxHP limit\nby 10,000', 'MaxHP Limit +10000']],
+    why: 'same MaxHP ceiling as Valhalla Knight Card, split across two lines with a comma [db]',
+  },
   'Sage Ring': {
     refinable: false,
     why: 'in-game it is not refinable, even though the dump says refine=1 [player report 2026-09-18]',

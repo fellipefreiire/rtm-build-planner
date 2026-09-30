@@ -89,7 +89,8 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   const myDef = defMultiplier(sheet.def.v)
   const pd = Math.min(100, sheet.perfectDodge.v)
   const parry = Math.min(100, sheet.totals.pct.shadow_parry ?? 0)
-  const taken = 1 + (sheet.totals.pct.dmg_taken ?? 0) / 100
+  // "Damage taken -5%" is dmg_taken −5; "Damage Reduction +5%" is dmg_reduction +5 (opposite sign)
+  const taken = 1 + ((sheet.totals.pct.dmg_taken ?? 0) - (sheet.totals.pct.dmg_reduction ?? 0)) / 100
 
   // Mob HIT vs your FLEE: hit rate = HIT − FLEE, between 10% and 100% (emu: renewal with base 0,
   // battle.cpp is_attack_hitting + battle.conf min/max_hitrate). Only applies to attacks that do not ignore FLEE.

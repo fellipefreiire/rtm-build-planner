@@ -18,6 +18,12 @@ export const MOD_KEYS = new Set([
   'melee_dmg', 'ranged_dmg', 'dmg_pct', 'shadow_parry', 'drop_rate',
   'dmg_taken', 'reflect_melee', 'double_attack_rate', 'auto_guard',
   'resist_melee', 'resist_long', 'resist_matk', 'resist_misc', 'fixed_cast',
+  // 2026-09-29: "Resistance vs All Sizes" used to land in resist_race; "Damage Reduction +5%"
+  // is the opposite sign of "Damage taken -5%", so it gets its own key (positive = less damage)
+  'resist_size', 'dmg_reduction',
+  // 2026-09-30: End of Kings ("Adds ATK equal to 10% of your total DEF", "Soft DEF +1%") and the
+  // MaxHP ceiling that Valhalla Knight Card / Heimdall's Legacy raise
+  'atk_from_def', 'matk_from_mdef', 'soft_def', 'hp_limit',
 ])
 
 const STATS = ['str', 'agi', 'vit', 'int', 'dex', 'luk']
@@ -71,7 +77,7 @@ const ALIAS = new Map(Object.entries({
   'long range damage received': ['resist_long'],
   'miscelaneous/special damage taken': ['resist_misc'],
   'miscellaneous/special damage taken': ['resist_misc'],
-  'misc damage taken': ['resist_misc'], 'all damage reduction': ['dmg_taken'],
+  'misc damage taken': ['resist_misc'], 'all damage reduction': ['dmg_reduction'],
   'long range attack': ['ranged_dmg'], 'long range damage': ['ranged_dmg'],
   regeneration: ['hp_regen'], 'def/mdef penetration': ['def_pen', 'mdef_pen'],
   // Veins Ghoul, Dream Manteau, Muspelskoll, Surt Shoes, Piercing Protocard, Gambit Gem…
@@ -79,9 +85,13 @@ const ALIAS = new Map(Object.entries({
   'defense/magic defense penetration': ['def_pen', 'mdef_pen'],
   'defense / magic defense penetration': ['def_pen', 'mdef_pen'],
   'magic penetration': ['mdef_pen'],
-  'bonus damage': ['dmg_pct'], 'base damage reduction': ['dmg_taken'],
-  'damage reduction': ['dmg_taken'], 'all element resistance': ['resist_element'],
+  'bonus damage': ['dmg_pct'], 'base damage reduction': ['dmg_reduction'],
+  'damage reduction': ['dmg_reduction'], 'all element resistance': ['resist_element'],
   'zeny limit': ['exp'],
+  // King's Suit/Mantle/Shoes: "Final Damage Received -10%" is the same stat as "Damage taken -10%"
+  'final damage received': ['dmg_taken'], 'final damage taken': ['dmg_taken'],
+  'atk from def': ['atk_from_def'], 'matk from mdef': ['matk_from_mdef'], 'soft def': ['soft_def'],
+  'maxhp limit': ['hp_limit'], 'max hp limit': ['hp_limit'],
   ...Object.fromEntries(STATS.map((s) => [s, [s]])),
 }))
 
@@ -103,6 +113,8 @@ const RE = {
   // continuation with no keyword: "+2% per Upgrade", "+10%", "5% Bonus Damage"
   bareCont: /^(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?<rest>bonus damage|damage)?$/i,
   piecesMarker: /^(\d+)\s+pieces?\s*:/i,
+  // "With two of these equipped:" (Valhalla Knight Card): needs N copies of this same item
+  copiesMarker: /^with\s+(two|three|four|\d+)\s+of\s+these\s+equipped\s*:?\s*$/i,
   skillColonLv: /^(?<s>[A-Za-z][A-Za-z '-]*?)\s*:\s*lv\s*(?<n>\d+)$/i,
   reflect: /^reflect\s+(?<n>\d+(?:[.,]\d+)?)%\s+melee\s+damage$/i,
   parenMeta: /^\(.*\)$/,
@@ -245,6 +257,7 @@ export function parseDesc(desc, itemId) {
     let inlineCond = null
     while ((m = RE.inlineMarker.exec(l))) {
       inlineCond = condFromMarker(m.groups.mk)
+      if (inlineCond.t === 'per_set_refine' && cond.t === 'set_bonus') inlineCond.set = cond.set
       l = m.groups.rest.trim()
     }
 
@@ -253,7 +266,10 @@ export function parseDesc(desc, itemId) {
     if ((m = RE.retroPerRefine.exec(l))) {
       const each = m[1] ? +m[1] : 1
       const isSet = /total\s+set/i.test(l)
-      for (const prev of lastMods) prev.cond = isSet ? { t: 'per_set_refine', each } : { t: 'per_refine', each }
+      for (const prev of lastMods) {
+        const set = prev.cond.t === 'set_bonus' ? prev.cond.set : undefined
+        prev.cond = isSet ? { t: 'per_set_refine', each, ...(set ? { set } : {}) } : { t: 'per_refine', each }
+      }
       return
     }
     if ((m = RE.perSkillLv.exec(l))) {
@@ -277,7 +293,15 @@ export function parseDesc(desc, itemId) {
       return
     }
     if ((m = RE.setName.exec(l))) { setName = norm(m.groups.set); return }
-    if ((m = RE.perTotalSet.exec(l))) { cond = { t: 'per_set_refine', each: m[1] ? +m[1] : 1 }; gate = null; return }
+    if ((m = RE.perTotalSet.exec(l))) {
+      // inside "X Set Bonus:" the refine that counts is the sum over the set's pieces
+      const set = cond.t === 'set_bonus' ? cond.set : cond.t === 'per_set_refine' ? cond.set : undefined
+      cond = { t: 'per_set_refine', each: m[1] ? +m[1] : 1, ...(set ? { set } : {}) }; gate = null; return
+    }
+    if ((m = RE.copiesMarker.exec(l))) {
+      const w = { two: 2, three: 3, four: 4 }[m[1].toLowerCase()] ?? +m[1]
+      cond = { t: 'copies_min', n: w }; gate = null; return
+    }
     if ((m = RE.perRefine.exec(l))) { cond = { t: 'per_refine', each: m[1] ? +m[1] : 1 }; gate = null; return }
     if ((m = RE.refineMin.exec(l)) || (m = RE.refineIf.exec(l))) { cond = { t: 'refine_min', n: +m[1] }; gate = null; return }
     if ((m = RE.levelIf.exec(l))) { cond = { t: 'level_min', n: +m[1] }; gate = null; return }
@@ -373,7 +397,7 @@ export function parseDesc(desc, itemId) {
       if (/^all\s+(races?|elements?|sizes?)$/.test(t)) {
         const kind = /race/.test(t) ? 'race' : /element/.test(t) ? 'element' : 'size'
         const list = kind === 'race' ? RACES : kind === 'element' ? ELEMENTS : SIZES
-        const key = isRes ? (kind === 'element' ? 'resist_element' : 'resist_race') : `dmg_vs_${kind}`
+        const key = isRes ? `resist_${kind}` : `dmg_vs_${kind}`
         for (const x of list) mods.push(mk(key, v, true, lineCond, { [kind]: x }, src, raw))
         return
       }
