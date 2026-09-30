@@ -102,12 +102,17 @@ const RE = {
   setName: /^(?<set>[A-Za-z][A-Za-z0-9 .'&-]*?)\s+set\s*:\s*$/i,
   // "per 2 refines" WITHOUT a colon is a suffix of the previous line, not a marker
   retroPerRefine: /^per\s+(?:(\d+)\s+)?(?:total\s+set\s+)?refines?\.?$/i,
+  // inside a set block, "Set refine 9+:" / "At set refine 9+ and again at 18+:" count the TOTAL refine of the set
+  setRefine: /^(?:at\s+)?set\s+refine\s+(\d+)\+?(?:\s+and\s+again\s+at\s+(\d+)\+?)?\s*:?\s*$/i,
   refineIf: /^(?:if\s+)?(?:set\s+)?refine\s+(?:is\s+)?\+?(\d+)(?:\s+or\s+higher)?\s*:?\s*$/i,
   // "Every level of Ominous Presence or Advanced Scythe Mastery boosts:"
   perSkillLv: /^every\s+(?:skill\s+)?level\s+of\s+(?<s>.+?)\s+boosts?\s*:?\s*$/i,
   levelIf: /^base\s+level\s+(\d+)(?:\s+or\s+higher)?\s*:?\s*$/i,
   // "Base VIT 90:" · "If Base INT is over 108:" · "If base STR is 120 or above:" · "If Base VIT < 80:"
-  baseStatIf: /^(?:if\s+)?base\s+(?<st>str|agi|vit|int|dex|luk)\s+(?:is\s+)?(?<op>over|>|<|>=|<=)?\s*(?<n>\d+)(?:\s+or\s+(?:above|higher|more))?\s*:\s*$/i,
+  // "If STR is above 98:" (Burning Fury) has no "base", but the script reads readparam(bStr), the allocated stat [emu]
+  baseStatIf: /^(?:if\s+(?:base\s+)?|base\s+)(?<st>str|agi|vit|int|dex|luk)\s+(?:is\s+)?(?<op>over|above|>|<|>=|<=)?\s*(?<n>\d+)(?:\s+or\s+(?:above|higher|more))?\s*:\s*$/i,
+  // "For each base stat over 98:" (Angel of Genesis, Demon of Apocalypse): × how many base stats pass
+  perBaseStat: /^for\s+each\s+base\s+stat\s+(?:is\s+)?(?:over|above)\s+(?<n>\d+)\s*:\s*$/i,
   slotsMeta: /^\d+\s+slots?$/i,
   extraCont: /^extra\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)(?<rest>.*)$/i,
   // continuation with no keyword: "+2% per Upgrade", "+10%", "5% Bonus Damage"
@@ -213,6 +218,20 @@ function unwrap(rawLines) {
     if (!/\d/.test(t) && /^[+-]?\d/.test(next) && t.length <= 42 && !/[.!?]$/.test(t)) {
       t = `${t} ${next}`
       i++
+    // 2026-09-30: a set header split in two ("Aggressive Orphan Set" / "Bonus:") was not seen as a header,
+    // so the set bonus was applied by every piece
+    } else if (/\bset$/i.test(t) && /^bonus\s*:?\s*$/i.test(next)) {
+      t = `${t} ${next}`
+      i++
+    // "At set refine 9+ and again" / "at 18+:"
+    } else if (/\band again$/i.test(t) && /^at\s+\d+\+?\s*:?\s*$/i.test(next)) {
+      t = `${t} ${next}`
+      i++
+    // a line with no number continued in lower case ("Wind elemental magic" / "damage +2%"): the
+    // second half alone read as "+2% damage" on anything
+    } else if (!/\d/.test(t) && /^[a-z]/.test(next) && /\d/.test(next) && t.length <= 42 && !/[.!?:]$/.test(t)) {
+      t = `${t} ${next}`
+      i++
     }
     // split compounds: "ATK+3%,MATK+3%"
     const joined = t.includes(',') && /\d/.test(t) && !RE.situational.test(t)
@@ -237,6 +256,8 @@ export function parseDesc(desc, itemId) {
   let lastKeys = null
   let lastMods = []
   let setName = null
+  /** name of the last "X Set Bonus:" block: set refine conditions belong to it */
+  let curSet = null
   /** base stat requirement ("Base VIT 90:"): applies until the next marker */
   let gate = null
   const pieces = unwrap(String(desc || '').split('\n'))
@@ -258,6 +279,9 @@ export function parseDesc(desc, itemId) {
     while ((m = RE.inlineMarker.exec(l))) {
       inlineCond = condFromMarker(m.groups.mk)
       if (inlineCond.t === 'per_set_refine' && cond.t === 'set_bonus') inlineCond.set = cond.set
+      // "Set refine 9+: ASPD Limit +1" inside a set block: total refine of the set
+      const sr = /^set\s+refine\s+\+?(\d+)/i.exec(m.groups.mk)
+      if (sr && curSet) inlineCond = { t: 'set_refine', ns: [+sr[1]], set: curSet }
       l = m.groups.rest.trim()
     }
 
@@ -283,14 +307,26 @@ export function parseDesc(desc, itemId) {
       const op = (m.groups.op || '').toLowerCase()
       gate = op === '<' ? { stat: m.groups.st.toLowerCase(), max: n - 1 }
         : op === '<=' ? { stat: m.groups.st.toLowerCase(), max: n }
-        : { stat: m.groups.st.toLowerCase(), min: op === 'over' || op === '>' ? n + 1 : n }
+        : { stat: m.groups.st.toLowerCase(), min: op === 'over' || op === 'above' || op === '>' ? n + 1 : n }
       cond = { t: 'always' }
       return
     }
+    if ((m = RE.perBaseStat.exec(l))) { cond = { t: 'per_base_stat_min', n: +m.groups.n + 1 }; gate = null; return }
     if ((m = RE.setBonus.exec(l))) {
       gate = null
       cond = { t: 'set_bonus', set: norm(m.groups.set) || setName || 'set' }
+      curSet = cond.set
       return
+    }
+    // "Full Shadow Card Set" on a line of its own (no colon, no "Bonus:"): what follows is a set bonus
+    if (!hasNum && l.length <= 40 && /^[A-Z][A-Za-z '&-]*\bSet$/.test(l)) {
+      gate = null
+      cond = { t: 'set_bonus', set: norm(l.replace(/\s*set$/i, '')) }
+      curSet = cond.set
+      return
+    }
+    if (curSet && (m = RE.setRefine.exec(l))) {
+      cond = { t: 'set_refine', ns: [+m[1], ...(m[2] ? [+m[2]] : [])], set: curSet }; gate = null; return
     }
     if ((m = RE.setName.exec(l))) { setName = norm(m.groups.set); return }
     if ((m = RE.perTotalSet.exec(l))) {

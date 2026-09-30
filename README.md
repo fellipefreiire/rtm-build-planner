@@ -3,6 +3,7 @@
 A build planner and damage simulator for **Return to Morroc: Refuge** (RTM), a Ragnarok Online private server.
 
 - **Build Planner** — equip items, cards, refines, random options, Dream Enchants, class gems and the Valhalla / Amatsu seals, allocate the skill tree and read a status window that matches the in-game one.
+- **Incoming** — pick a monster and see what its normal attack and each of its skills does to the active build, per hit: after DEF/MDEF, armor element and resistances, as % of your HP and hits to die. Monster skills come from the rAthena emulator (the RTM database has none).
 - **Simulator** — build a skill rotation on a timeline and see Combo Ready, Finisher Ready and Overslash stacks over time, the damage of every cast, a per-skill breakdown and the rotation total / DPS against any monster.
 
 It is a static site (no server, no account): builds are saved in your browser and can be exported/imported as JSON.
@@ -21,7 +22,7 @@ Requires Node.js 20+.
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+npm run dev      # http://localhost:7000
 npm test         # unit, golden and calibration tests
 npm run build    # static export to out/
 ```
@@ -53,6 +54,8 @@ scripts/etl/          build-time: raw dump -> typed JSON
   skills.mjs          "Damage is 150+15% per level +2% per LUK" -> coefficients
   overrides.mjs       corrections to the dump, each with a reason
   emu-extract.py      rAthena emulator -> src/data/emu.json (jobs, base ASPD, weapon types)
+  mob-skills-extract.py  rAthena emulator -> src/data/mob-skills.json (monster skills, MATK)
+  base-mob-skills.py  mob-skills.json -> "Skills" section of the knowledge base mob pages
 src/data/*.json       ETL output — do not edit by hand
 src/lib/rules/        what no text states: server constants, class rules, random options,
                       Dream Enchants, seals

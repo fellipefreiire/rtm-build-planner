@@ -202,11 +202,14 @@ function main() {
       if (m.cond.t === 'set_bonus') (setMembers[m.cond.set] ??= new Set()).add(it.name)
     }
   }
+  // a set declared by a single item ("Full Shadow Card Set" on Rank S Shadow Card) has pieces the dump does not
+  // name: it can never be verified complete, so it is kept as incomplete instead of applying on its own
+  for (const [k, v] of Object.entries(setMembers)) if (v.size === 1) v.add('(pieces not listed in the db)')
   for (const it of out) {
     for (const m of it.mods) {
       if (m.cond.t === 'set_bonus') m.cond.members = [...setMembers[m.cond.set]].sort()
       // "Per total set refine" inside a set block: same pieces, and the refine that counts is their sum
-      if (m.cond.t === 'per_set_refine' && m.cond.set && setMembers[m.cond.set]) m.cond.members = [...setMembers[m.cond.set]].sort()
+      if ((m.cond.t === 'per_set_refine' || m.cond.t === 'set_refine') && m.cond.set && setMembers[m.cond.set]) m.cond.members = [...setMembers[m.cond.set]].sort()
     }
   }
   const unnamedSets = setMembers.set?.size ?? 0

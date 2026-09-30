@@ -14,7 +14,9 @@ const RE = {
   hpPct: new RegExp(String.raw`requires?\s+(?:an\s+)?extra\s+(?<n>${N})%\s+current\s+hp`, 'i'),
   // "Skill can be critical" / "Skill can be a critical hit" (Scythe Reap)
   crit: /skill can be (?:a )?critical/i,
-  magic: /damage is magical|magical damage|based on matk/i,
+  // 2026-09-30: "Dark and elemental magic damage" (Conflagration) was read as physical; "magic damage bonus"
+  // (Soul Destroyer) is a hybrid and stays physical
+  magic: /damage is magical|magical damage|based on matk|\bmagic damage\b(?!\s+bonus)/i,
 }
 
 const num = (s) => Number(String(s).replace(',', '.'))

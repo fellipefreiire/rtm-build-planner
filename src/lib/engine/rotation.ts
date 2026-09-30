@@ -153,7 +153,8 @@ export function runRotation(i: RotationInput): RotationResult {
   // damage of a cast from its plan; notes explain what could not be modeled
   const damageOf = (s: Skill, lv: number, plan: CastPlan, notes: string[]) => {
     const d = s.damage
-    if (!d || d.magic) { notes.push(d?.magic ? 'magic damage: not modeled' : 'no damage formula'); return 0 }
+    if (!d) { notes.push('no damage formula'); return 0 }
+    if (d.magic) notes.push('magic damage: MATK × % × skill element × MDEF [simplified]')
     const { sheet, index } = hitOf(s, lv, plan.sheetToggles, plan.element)
     const pct = sheet.skillPct?.v ?? 0
     const pctFactor = plan.pctAdd && pct > 0 ? (pct + plan.pctAdd) / pct : 1

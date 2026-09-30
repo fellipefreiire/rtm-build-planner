@@ -76,12 +76,14 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
       hits = 2 // "Damage is dealt twice in separate hits"
       const lost = Math.floor(maxHp * missing / 100)
       if (lost >= 50) add(Math.floor(lost / 50), `${lost} HP missing (1% per 50)`)
-      // "Increases Scaling by 1% per 200 Max HP per level" [db, literal reading]
-      if (harvest) add(Math.floor(maxHp / 200) * c.lv, `Harvest (1% per 200 MaxHP × Lv${c.lv}) [literal reading]`)
+      // "Increases Scaling by 1% per 200 Max HP per level": the emulator has exactly that, on MATK
+      // (WL_HELLINFERNO: skillratio += MaxHP / 200 × skill_lv under SC_NEN, battle.cpp:6973) [emu]
+      if (harvest) add(Math.floor(maxHp / 200) * c.lv, `Harvest (1% per 200 MaxHP × Lv${c.lv}) [emu]`)
     } else if (c.key === CHILLING_FROST) {
       if (harvest && missing) add(missing, `Harvest (base +1% × ${missing}% HP missing) [estimated]`)
     }
-    return { hits, mult, pctAdd, notes }
+    // Conflagration is Dark magic (emulator: WL_HELLINFERNO, Element DARK, battle_calc_magic_attack)
+    return { hits, mult, pctAdd, notes, ...(c.key === CONFLAGRATION ? { element: 'Dark' } : {}) }
   },
 
   after: (c) => {

@@ -17,7 +17,10 @@ import SkillTree from '@/components/SkillTree'
 import Breakdown from '@/components/Breakdown'
 import SlotModal from '@/components/SlotModal'
 import Simulator from '@/components/Simulator'
+import Incoming from '@/components/Incoming'
 import { K_TAB } from '@/lib/sim-store'
+
+type Tab = 'planner' | 'sim' | 'incoming'
 
 export default function Page() {
   // several named builds; everything on the screen works on the active one (2026-09-30)
@@ -27,11 +30,14 @@ export default function Page() {
     setBuilds((s) => setActiveBuild(s, typeof b === 'function' ? b(activeBuild(s)) : b)), [])
   /** slot open in the edit modal */
   const [editing, setEditing] = useState<SlotId | null>(null)
-  const [tab, setTab] = useState<'planner' | 'sim'>('planner')
+  const [tab, setTab] = useState<Tab>('planner')
   useEffect(() => {
-    try { if (localStorage.getItem(K_TAB) === 'sim') setTab('sim') } catch { /* no storage */ }
+    try {
+      const t = localStorage.getItem(K_TAB)
+      if (t === 'sim' || t === 'incoming') setTab(t)
+    } catch { /* no storage */ }
   }, [])
-  const openTab = (t: 'planner' | 'sim') => { setTab(t); try { localStorage.setItem(K_TAB, t) } catch { /* no storage */ } }
+  const openTab = (t: Tab) => { setTab(t); try { localStorage.setItem(K_TAB, t) } catch { /* no storage */ } }
   const [toggles, setToggles] = useState<Record<string, boolean>>({})
 
   // --- state saved in the browser as JSON (2026-09-28: replaces the URL) ---
@@ -140,6 +146,7 @@ export default function Page() {
         <nav className="tabs">
           <button aria-pressed={tab === 'planner'} onClick={() => openTab('planner')}>Build Planner</button>
           <button aria-pressed={tab === 'sim'} onClick={() => openTab('sim')}>Simulator</button>
+          <button aria-pressed={tab === 'incoming'} onClick={() => openTab('incoming')} title="what each attack of a mob does to you">Incoming</button>
         </nav>
         {rules.toggles.map((t) => (
           <label key={t.id} title={t.why} style={{ marginLeft: 16 }}>
@@ -170,7 +177,7 @@ export default function Page() {
         </span>
       </header>
 
-      {tab === 'sim' ? <Simulator build={build} onSwitch={(slot) => patch((b) => toggleSwitch(b, slot))} /> : (
+      {tab === 'incoming' ? <Incoming build={build} sheet={sheet} /> : tab === 'sim' ? <Simulator build={build} onSwitch={(slot) => patch((b) => toggleSwitch(b, slot))} /> : (
       <main className="cols">
         <section className="col left">
           <StatusWindow

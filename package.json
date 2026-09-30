@@ -7,7 +7,7 @@
     "data": "node scripts/etl/build-data.mjs",
     "icons": "node scripts/fetch-icons.mjs",
     "skill-icons": "node scripts/fetch-skill-icons.mjs",
-    "dev": "next dev",
+    "dev": "next dev -p 7000",
     "build": "next build",
     "start": "npx serve out",
     "test": "vitest run"

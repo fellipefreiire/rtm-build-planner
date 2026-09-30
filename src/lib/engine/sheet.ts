@@ -64,6 +64,8 @@ export type StatSheet = {
   /** lowercase skill name: the skill_dmg key */
   skillName: string | null
   canCrit: boolean
+  /** the chosen skill deals magic damage (MATK, MDEF) */
+  magic: boolean
   /** the chosen skill's attack range: range >= 4 cells is ranged (battle.cpp battle_range_type) [emu] */
   rangeType: 'melee' | 'ranged'
   skillParts: Extra[]
@@ -84,9 +86,13 @@ const CONDITIONAL_SKIP: Record<string, string> = {
   copies_min: 'needs more copies of this item equipped',
 }
 
-/** Set bonus dedupe key: the same bonus is repeated on every piece. */
+/**
+ * Set bonus dedupe key: the same bonus is repeated on every piece. The scope is part of it: "Damage vs all
+ * races +10%" is 10 mods with the same text, one per race, and without the scope only the first one counted.
+ */
+const scopeKey = (m: Modifier) => (m.scope ? JSON.stringify(m.scope) : '')
 const setKey = (m: Modifier) =>
-  m.cond.t === 'set_bonus' ? `${m.cond.set}|${m.key}|${m.value}|${m.pct}|${m.raw}` : ''
+  m.cond.t === 'set_bonus' ? `${m.cond.set}|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}` : ''
 
 function addMod(t: Totals, m: Modifier, mult: number) {
   const v = m.value * mult
@@ -103,7 +109,7 @@ function addMod(t: Totals, m: Modifier, mult: number) {
 /** Multiplier of a Cond. `null` = not applicable (becomes `skipped`). */
 function condMultiplier(
   m: Modifier, refine: number, baseLv: number, stats: Record<StatKey, number> | null,
-  skills: Record<string, number> = {},
+  skills: Record<string, number> = {}, baseStats: Record<StatKey, number> | null = null,
 ): number | null {
   const c = m.cond
   switch (c.t) {
@@ -115,6 +121,8 @@ function condMultiplier(
     // "Every level of X or Y": SUMS the levels of both. Measured on 2026-09-28 (Ominous Lament): Roaring +89% and
     // Reaping +40% in @battlestats, crit 117 in the window — they only add up with 2% × (10 + 10)
     case 'per_skill_lv': return c.skills.reduce((a, k) => a + (skills[k] ?? 0), 0)
+    // Angel of Genesis: one `if (readparam(bX) > 98)` per stat, and readparam is the allocated stat (pc.cpp:8026) [emu]
+    case 'per_base_stat_min': return baseStats ? Object.values(baseStats).filter((v) => v >= c.n).length : null
     default: return null
   }
 }
@@ -194,7 +202,7 @@ export function computeSheet(
         }
         if (m.cond.t === 'per_set_refine' && m.cond.members) {
           // same dedupe as the set bonus: every piece repeats the line
-          const k = `${m.cond.set}|refine|${m.key}|${m.value}|${m.pct}|${m.raw}`
+          const k = `${m.cond.set}|refine|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
           if (seenSetBonus.has(k)) continue
           seenSetBonus.add(k)
           const members = m.cond.members
@@ -208,9 +216,26 @@ export function computeSheet(
           if (mult) addMod(totals, m, mult)
           continue
         }
+        if (m.cond.t === 'set_refine' && m.cond.members) {
+          // once per set; counts how many thresholds the set's total refine reaches ("9+ and again at 18+")
+          const k = `${m.cond.set}|setref|${m.cond.ns.join(',')}|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
+          if (seenSetBonus.has(k)) continue
+          seenSetBonus.add(k)
+          const members = m.cond.members
+          const missing = members.filter((n) => !wearing.has(n))
+          if (missing.length) {
+            skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
+            continue
+          }
+          const total = equipped.filter((e) => members.includes(e.item.name)).reduce((a, e) => a + e.refine, 0)
+          const mult = m.cond.ns.filter((n) => total >= n).length
+          if (mult) addMod(totals, m, mult)
+          else skipped.push({ raw: m.raw, itemName: it.name, why: `set refine ${total} below ${m.cond.ns[0]}` })
+          continue
+        }
         if (m.cond.t === 'copies_min') {
           // "With two of these equipped": counts once, and only with N copies of the same item
-          const k = `copies|${it.id}|${m.key}|${m.raw}`
+          const k = `copies|${it.id}|${m.key}|${scopeKey(m)}|${m.raw}`
           if (seenSetBonus.has(k)) continue
           seenSetBonus.add(k)
           const copies = equipped.reduce((a, e) => a + (e.item.id === it.id ? 1 : 0) + e.cards.filter((c) => c.id === it.id).length, 0)
@@ -222,7 +247,7 @@ export function computeSheet(
           continue
         }
         if (m.cond.t === 'per_stat') { pending.push({ m, refine, itemName: it.name }); continue }
-        const mult = condMultiplier(m, refine, build.baseLv, null, build.skills)
+        const mult = condMultiplier(m, refine, build.baseLv, null, build.skills, build.stats)
         if (mult === null) {
           skipped.push({ raw: m.raw, itemName: it.name, why: CONDITIONAL_SKIP[m.cond.t] ?? 'condition not modeled' })
           continue
@@ -485,6 +510,7 @@ export function computeSheet(
     skillParts,
     skillName: skill ? skill.name.toLowerCase() : null,
     canCrit: skill?.damage?.canCrit ?? true,
+    magic: !!skill?.damage?.magic,
     // skillrange_by_distance does not include players (conf/battle/skill.conf: 14), so the skill's range decides;
     // Devil Raid (range 9) measured in-game 2026-09-30 without the build's Melee +15%
     rangeType: (skill?.range?.[Math.min(ctxSkillLv || 1, skill.range.length) - 1] ?? 1) >= 4 ? 'ranged' : 'melee',
