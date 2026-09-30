@@ -1,30 +1,34 @@
 'use client'
 import { Skill } from '@/lib/types'
-import { RotationResult, Span } from '@/lib/engine/rotation'
+import { RotationResult } from '@/lib/engine/rotation'
+import { LaneDef, LaneSpan } from '@/lib/rules/rotation'
 
 const PX = 90 // pixels per second
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 
 /**
  * Rotation on a time axis: one lane with the skills (from start to end of cast + delay)
- * and state lanes — Combo Ready, Finisher Ready and Overslash stacks — showing
- * where each one starts and ends.
+ * and the class's state lanes (Revenant: Combo Ready, Finisher Ready and Overslash stacks;
+ * Dark Knight: Combo Ready), showing where each one starts and ends.
  */
-export default function RotationTrack({ rot, skills, onRemove }: {
+export default function RotationTrack({ rot, skills, lanes, onRemove }: {
   rot: RotationResult
   skills: Map<string, Skill>
+  lanes: LaneDef[]
   onRemove: (i: number) => void
 }) {
-  const ends = [rot.duration, ...rot.lanes.comboReady.map((x) => x.to), ...rot.lanes.finisherReady.map((x) => x.to), ...rot.lanes.stacks.map((x) => x.to)]
+  const ends = [rot.duration, ...lanes.flatMap((l) => (rot.lanes[l.id] ?? []).map((x) => x.to))]
   const total = Math.max(1, ...ends) + 0.5
   const width = Math.ceil(total * PX)
   const x = (t: number) => t * PX
   const ticks = Array.from({ length: Math.floor(total) + 1 }, (_, i) => i)
 
-  const bars = (list: Span[], cls: string, label: (s: Span) => string) =>
+  // counted lanes (Overslash) get darker with more stacks
+  const bars = (list: LaneSpan[], cls: string, label: (s: LaneSpan) => string) =>
     list.map((s, i) => (
-      <div key={i} className={`tr-bar ${cls}`} style={{ left: x(s.from), width: Math.max(4, x(s.to - s.from)) }}
-        title={`${label(s)} · ${s.from.toFixed(1)}s → ${s.to.toFixed(1)}s (${(s.to - s.from).toFixed(1)}s)`}>
+      <div key={i} className={`tr-bar ${cls}`}
+        style={{ left: x(s.from), width: Math.max(4, x(s.to - s.from)), ...(s.stacks != null ? { opacity: 0.45 + 0.11 * s.stacks } : {}) }}
+        title={`${s.stacks != null ? `${s.stacks} stack(s)` : label(s)} · ${s.from.toFixed(1)}s → ${s.to.toFixed(1)}s (${(s.to - s.from).toFixed(1)}s)`}>
         <span>{label(s)}</span>
       </div>
     ))
@@ -34,9 +38,7 @@ export default function RotationTrack({ rot, skills, onRemove }: {
       <div className="track-labels">
         <div className="tr-label ruler" />
         <div className="tr-label">Skills</div>
-        <div className="tr-label">Combo Ready</div>
-        <div className="tr-label">Finisher Ready</div>
-        <div className="tr-label">Overslash</div>
+        {lanes.map((l) => <div key={l.id} className="tr-label">{l.label}</div>)}
       </div>
       <div className="track-scroll">
         <div className="track-area" style={{ width }}>
@@ -57,14 +59,7 @@ export default function RotationTrack({ rot, skills, onRemove }: {
               )
             })}
           </div>
-          <div className="tr-row">{bars(rot.lanes.comboReady, 'cr', () => 'CR')}</div>
-          <div className="tr-row">{bars(rot.lanes.finisherReady, 'fr', () => 'FR')}</div>
-          <div className="tr-row">{rot.lanes.stacks.map((s, i) => (
-            <div key={i} className="tr-bar st" style={{ left: x(s.from), width: Math.max(4, x(s.to - s.from)), opacity: 0.45 + 0.11 * s.stacks }}
-              title={`${s.stacks} stack(s) · ${s.from.toFixed(1)}s → ${s.to.toFixed(1)}s`}>
-              <span>◆ {s.stacks}</span>
-            </div>
-          ))}</div>
+          {lanes.map((l) => <div key={l.id} className="tr-row">{bars(rot.lanes[l.id] ?? [], l.cls, l.short)}</div>)}
         </div>
       </div>
     </div>

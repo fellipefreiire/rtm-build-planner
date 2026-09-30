@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Build, Skill, SlotId, SLOTS, StatKey, STATS } from '@/lib/types'
-import { byId, mobs, skillByKey } from '@/lib/data'
-import { ROTATION_SKILLS, runRotation } from '@/lib/engine/rotation'
+import { byId, classByName, mobs, skillByKey } from '@/lib/data'
+import { runRotation } from '@/lib/engine/rotation'
 import { learnedToggles, rulesFor } from '@/lib/rules/classes'
+import { rotationRulesFor } from '@/lib/rules/rotation'
 import { SimState, loadSim, saveSim } from '@/lib/sim-store'
 import MobModal from './MobModal'
 import RotationTrack from './RotationTrack'
@@ -15,6 +16,17 @@ const sec = (n: number) => `${n.toFixed(1)}s`
 
 type Row = { id: string; name: string; build: Build }
 
+/** autocasts of a step grouped by skill: "+Vengeance ×2" */
+const autoTags = (list: { name: string; notes: string[] }[]) => {
+  const out: { name: string; n: number; notes: string }[] = []
+  for (const a of list) {
+    const g = out.find((x) => x.name === a.name)
+    if (g) g.n++
+    else out.push({ name: a.name, n: 1, notes: a.notes.join(' · ') })
+  }
+  return out
+}
+
 function SkillIcon({ s, size = 26 }: { s?: Skill; size?: number }) {
   // eslint-disable-next-line @next/next/no-img-element
   return s?.icon ? <img className="sk-icon" src={`skills/${s.icon}.png`} alt="" width={size} height={size} /> : <span className="sk-icon" />
@@ -22,6 +34,7 @@ function SkillIcon({ s, size = 26 }: { s?: Skill; size?: number }) {
 
 export default function Simulator({ build, onSwitch }: { build: Build; onSwitch: (slot: SlotId) => void }) {
   const rules = useMemo(() => rulesFor(build.cls), [build.cls])
+  const rr = useMemo(() => rotationRulesFor(build.cls), [build.cls])
   const buffDefaults = useMemo(() => Object.fromEntries(rules.simBuffs.map((t) => [t.id, t.default])), [rules])
   const [sim, setSim] = useState<SimState | null>(null)
   const [mobOpen, setMobOpen] = useState(false)
@@ -32,11 +45,14 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
   // only the Planner build (build comparison was removed from the screen on 2026-09-28)
   const rows: Row[] = useMemo(() => [{ id: 'current', name: 'Current (Build Planner)', build }], [build])
 
-  // palette: rotation skills the current build has learned
-  const palette = useMemo(
-    () => ROTATION_SKILLS.map((k) => skillByKey.get(k)).filter((s): s is Skill => !!s && (build.skills[s.key] ?? 0) > 0),
-    [build.skills],
-  )
+  // palette: the class module picks from the learned damage skills of the lineage
+  const palette = useMemo(() => {
+    const lineage = classByName.get(build.cls)?.lineage ?? [build.cls]
+    const lineageSkills = lineage.flatMap((c) => classByName.get(c)?.damageSkills ?? [])
+    return rr.palette(build, lineageSkills).map((k) => skillByKey.get(k)).filter((s): s is Skill => !!s)
+  }, [rr, build])
+  // one rotation per class, so switching class does not mix skills
+  const rotation = useMemo(() => sim?.rotations[build.cls] ?? [], [sim, build.cls])
 
   const result = useMemo(() => {
     if (!sim) return null
@@ -47,20 +63,22 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
     const out = rows.map((r) => ({
       ...r,
       rot: runRotation({
-        build: r.build, byId, steps: sim.rotation, skills: skillByKey, rules,
-        toggles: learnedToggles(rules, r.build.skills, sim.buffs), food, mob, k,
+        build: r.build, byId, steps: rotation, skills: skillByKey, rules,
+        toggles: learnedToggles(rules, r.build.skills, sim.buffs), food, mob, k, hpPct: sim.hpPct,
       }),
     }))
-    // current build attributes: bare × with the checked buffs and food
-    const roar = skillByKey.get('revenant/roaring-overslash') ?? null
-    const cur = { ...build, skillKey: roar?.key ?? null }
-    const statsBase = computeSheet(cur, byId, roar, rules, {}, null)
-    const statsBuffed = computeSheet(cur, byId, roar, rules, learnedToggles(rules, build.skills, sim.buffs), food)
+    // current build attributes: bare × with the checked buffs and food, for the class's first skill
+    const ref = palette[0] ?? null
+    const cur = { ...build, skillKey: ref?.key ?? null }
+    const statsBase = computeSheet(cur, byId, ref, rules, {}, null)
+    const statsBuffed = computeSheet(cur, byId, ref, rules, learnedToggles(rules, build.skills, sim.buffs), food)
     return { out, mob, statsBase, statsBuffed }
-  }, [sim, rows, rules, build])
+  }, [sim, rows, rules, build, rotation, palette])
 
   if (!sim || !result) return <div style={{ padding: 20 }}><small>loading…</small></div>
   const set = (f: (s: SimState) => SimState) => setSim((s) => (s ? f(structuredClone(s)) : s))
+  const setRotation = (f: (r: string[]) => string[]) => set((s) => { s.rotations[build.cls] = f(s.rotations[build.cls] ?? []); return s })
+  const hasHarvest = rules.simBuffs.some((b) => b.id === 'harvest')
   const { out, mob, statsBase, statsBuffed } = result
   const first = out[0]
 
@@ -77,6 +95,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
     .map((m) => ({ slot: m.id, label: m.label, side: build.swapSide?.[m.id] ?? 'A', active: nameOf(build.slots[m.id]), reserve: nameOf(build.swaps?.[m.id]) }))
   // Combo Ready is no longer a buff: it now comes from the rotation
   const buffsShown = rules.simBuffs.filter((t) => t.id !== 'comboReady' && (!t.skill || (build.skills[t.skill] ?? 0) > 0))
+  const legend = rr.lanes.map((l) => `${l.id === 'stacks' ? '◆' : l.short({ from: 0, to: 0 })} = ${l.label}${l.id === 'stacks' ? ' stacks before → after' : ''} ·`).join(' ')
   // breakdown rows: every skill that appears in any build, in rotation order
   const skillRows = [...new Set(out.flatMap((r) => r.rot.bySkill.map((b) => b.skill)))]
 
@@ -131,6 +150,14 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                 <span>{t.label}</span>
               </label>
             ))}
+            {hasHarvest && (
+              <div className="sim-row" title="Harvest scales with missing HP. The HP stays at this value for the whole rotation (costs, leech and regen are not simulated).">
+                <span>HP during rotation</span>
+                <input type="number" min={1} max={100} value={sim.hpPct} style={{ width: '4em' }}
+                  onChange={(e) => { const v = Math.max(1, Math.min(100, Number(e.target.value) || 100)); set((s) => { s.hpPct = v; return s }) }} />
+                <small>%</small>
+              </div>
+            )}
             <div className="sim-row">
               <span>Food</span>
               <select value={sim.food.stat} onChange={(e) => { const v = e.target.value as StatKey; set((s) => { s.food.stat = v; return s }) }}>
@@ -148,7 +175,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
             {palette.length === 0 && <small>No rotation skill learned in the Skill Tree.</small>}
             {palette.map((s) => (
               <button key={s.key} className="pal-skill" title={s.damage?.formulaRaw ?? s.name}
-                onClick={() => set((st) => { st.rotation = [...st.rotation, s.key]; return st })}>
+                onClick={() => setRotation((r) => [...r, s.key])}>
                 <SkillIcon s={s} /> <span>{s.name}</span>
               </button>
             ))}
@@ -160,23 +187,23 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
             <span>⏱</span> Rotation {first ? `· ${first.name}` : ''}
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
               {first && <small>{sec(first.rot.duration)} · {fmt(first.rot.total)} · DPS {fmt(first.rot.dps)}</small>}
-              {sim.rotation.length > 0 && <button className="link-btn" style={{ padding: 0 }} onClick={() => set((s) => { s.rotation = []; return s })}>clear</button>}
+              {rotation.length > 0 && <button className="link-btn" style={{ padding: 0 }} onClick={() => setRotation(() => [])}>clear</button>}
             </span>
           </div>
-          {first && sim.rotation.length > 0 && (
-            <RotationTrack rot={first.rot} skills={skillByKey}
-              onRemove={(i) => set((st) => { st.rotation = st.rotation.filter((_, j) => j !== i); return st })} />
+          {first && rotation.length > 0 && (
+            <RotationTrack rot={first.rot} skills={skillByKey} lanes={rr.lanes}
+              onRemove={(i) => setRotation((r) => r.filter((_, j) => j !== i))} />
           )}
           <div className="timeline">
-            {sim.rotation.length === 0 && <small>Build the rotation by clicking the skills above.</small>}
-            {sim.rotation.map((key, i) => {
+            {rotation.length === 0 && <small>Build the rotation by clicking the skills above.</small>}
+            {rotation.map((key, i) => {
               const s = skillByKey.get(key)
               const e = first?.rot.events[i]
               return (
                 <div key={i} className={`tl-step ${e && !e.damage ? 'zero' : ''}`} title={e?.notes.join(' · ') || undefined}>
                   <div className="tl-head">
                     <span className="tl-t">{e ? sec(e.start) : '—'}</span>
-                    <button className="eq-x" title="remove" onClick={() => set((st) => { st.rotation = st.rotation.filter((_, j) => j !== i); return st })}>×</button>
+                    <button className="eq-x" title="remove" onClick={() => setRotation((r) => r.filter((_, j) => j !== i))}>×</button>
                   </div>
                   <div className="tl-main"><SkillIcon s={s} size={22} /><span>{s?.name ?? key}</span></div>
                   {e && (
@@ -186,14 +213,15 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                       {(e.stacksBefore > 0 || e.stacksAfter > 0) && <span className="tag st">◆ {e.stacksBefore}→{e.stacksAfter}</span>}
                       {e.hits > 1 && <span className="tag">{e.hits} hits</span>}
                       {e.waitedSp > 0 && <span className="tag sp">SP</span>}
+                      {autoTags(e.autocasts).map((a) => <span key={a.name} className="tag" title={a.notes}>+{a.name}{a.n > 1 ? ` ×${a.n}` : ''}</span>)}
                     </div>
                   )}
-                  <div className="tl-dmg">{e ? (e.damage ? fmt(e.damage) : '—') : ''}</div>
+                  <div className="tl-dmg">{e ? (e.damage ? fmt(e.damage) : '—') : ''}{e && e.autocasts.length > 0 && <small> +{fmt(e.autocasts.reduce((a, x) => a + x.damage, 0))}</small>}</div>
                 </div>
               )
             })}
           </div>
-          <div className="sim-in"><small>CR = Combo Ready · FR = Finisher Ready · ◆ = Overslash stacks before → after · SP = waited to regenerate · time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
+          <div className="sim-in"><small>{legend} SP = waited to regenerate · +Skill = autocast by gear (no time, no SP), its damage after the +· time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
         </div>
 
         <div className="eq-window sim-box">

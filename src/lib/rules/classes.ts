@@ -32,8 +32,8 @@ export type ClassRules = {
   toggles: Toggle[]
   /** buffs only the Simulator turns on (the Planner shows unbuffed status) */
   simBuffs: Toggle[]
-  /** mods from active buffs, added before stats */
-  buffMods: (toggles: Record<string, boolean>) => BuffMod[]
+  /** mods from active buffs, added before stats (skills and BASE stats for buffs that scale) */
+  buffMods: (toggles: Record<string, boolean>, c?: { skills: Record<string, number>; stats: Record<StatKey, number> }) => BuffMod[]
   /** percentage points added to the skill %, beyond what the dump declares */
   skillPctExtra: (c: RuleCtx) => Extra[]
   /** absorb shield, if the class has one */
@@ -146,7 +146,34 @@ const REVENANT: ClassRules = {
   },
 }
 
-const TABLE: Record<string, ClassRules> = { Revenant: REVENANT }
+// Dark Knight: not calibrated. The buffs come from the skill texts; the rotation rules
+// (Combo Ready, Harvest by missing HP, autocasts) live in rules/rotation/dark-knight.ts.
+const DARK_KNIGHT: ClassRules = {
+  ...GENERIC('Dark Knight'),
+  simBuffs: [
+    { id: 'harvest', skill: 'dark-knight/harvest', label: 'Harvest', default: true, why: 'STR and INT +1 per level; skills scale with missing HP (set the HP of the rotation). Blocks healing from skills. [db]' },
+    { id: 'blackMetal', skill: 'dark-knight/black-metal', label: 'Black Metal', default: true, why: 'Party ATK/MATK +10; Devil Raid damage is doubled. [db]' },
+    { id: 'knightRitual', skill: 'dark-knight/knight-ritual', label: 'Knight Ritual', default: true, why: 'STR and VIT +(2 + level)%, of the base stat [estimated]. Removes Harvest when cast. [db]' },
+  ],
+  buffMods: (t, c) => {
+    const lv = (k: string) => c?.skills[k] ?? 0
+    const out: BuffMod[] = []
+    const h = lv('dark-knight/harvest')
+    if (t.harvest && h) out.push({ key: 'str', value: h, pct: false, label: 'Harvest' }, { key: 'int', value: h, pct: false, label: 'Harvest' })
+    if (t.blackMetal) out.push({ key: 'atk', value: 10, pct: false, label: 'Black Metal' })
+    const kr = lv('dark-knight/knight-ritual')
+    if (t.knightRitual && kr && c) {
+      const pct = 2 + kr
+      out.push(
+        { key: 'str', value: Math.floor(c.stats.str * pct / 100), pct: false, label: 'Knight Ritual' },
+        { key: 'vit', value: Math.floor(c.stats.vit * pct / 100), pct: false, label: 'Knight Ritual' },
+      )
+    }
+    return out
+  },
+}
+
+const TABLE: Record<string, ClassRules> = { Revenant: REVENANT, 'Dark Knight': DARK_KNIGHT }
 
 export const rulesFor = (cls: string): ClassRules => TABLE[cls] ?? GENERIC(cls)
 

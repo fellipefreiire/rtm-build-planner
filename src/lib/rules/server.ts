@@ -159,6 +159,8 @@ export function maxHpSp(
 }
 
 type EmuData = {
+  /** internal skill name (the dump's `icon`) -> after cast delay in ms, flat or per level */
+  skillAcd: Record<string, number | number[]>
   classJob: Record<string, string>
   classJobUncertain: Record<string, string>
   baseAspd: Record<string, Record<string, number>>
@@ -175,6 +177,13 @@ const EMU = emu as unknown as EmuData
  * battle.cpp:1832 applies it last, to any damage: max(damage × rate / 100, 1). [emu]
  */
 export const mobDamageTaken = (id: number): number => EMU.mobDamageTaken[String(id)] ?? 100
+
+/** After cast delay (ms) of the emulator skill that carries this icon; null when the emulator has none. [emu] */
+export function emuAcdMs(icon: string | null | undefined, lv: number): number | null {
+  const d = icon ? EMU.skillAcd?.[icon] : undefined
+  if (d == null) return null
+  return Array.isArray(d) ? d[Math.min(Math.max(lv, 1), d.length) - 1] ?? null : d
+}
 
 /** Internal emulator job for the RTM class. */
 export const emuJob = (cls: string): { job: string | null; doubtful: string | null } => ({

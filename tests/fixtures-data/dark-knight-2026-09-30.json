@@ -1,0 +1,169 @@
+{
+ "v": 1,
+ "cls": "Dark Knight",
+ "baseLv": 150,
+ "jobLv": 70,
+ "points": null,
+ "stats": {
+  "str": 99,
+  "agi": 1,
+  "vit": 99,
+  "int": 1,
+  "dex": 99,
+  "luk": 1
+ },
+ "slots": {
+  "weapon": {
+   "id": 1193,
+   "refine": 8,
+   "cards": [
+    4407,
+    4136,
+    4136,
+    4136
+   ]
+  },
+  "upper": {
+   "id": 31221,
+   "refine": 9,
+   "cards": [
+    30164,
+    30164
+   ]
+  },
+  "armor": {
+   "id": 15388,
+   "refine": 9,
+   "cards": [
+    13742
+   ]
+  },
+  "mid": {
+   "id": 5930,
+   "refine": 10,
+   "cards": [
+    4352
+   ],
+   "dream": "dream-of-life"
+  },
+  "lower": {
+   "id": 5929,
+   "refine": 10,
+   "cards": [
+    13734,
+    13734
+   ],
+   "dream": "nightmare-keeper"
+  },
+  "shadowArmor": {
+   "id": 28068,
+   "refine": 10,
+   "cards": []
+  },
+  "shadowGloves": {
+   "id": 28069,
+   "refine": 10,
+   "cards": []
+  },
+  "shadowShoes": {
+   "id": 28070,
+   "refine": 10,
+   "cards": []
+  },
+  "shadowAcc": {
+   "id": 28071,
+   "refine": 10,
+   "cards": []
+  },
+  "gem": {
+   "id": 60118,
+   "refine": 7,
+   "cards": []
+  },
+  "manual": {
+   "id": 24236,
+   "refine": 0,
+   "cards": []
+  },
+  "garment": {
+   "id": 15389,
+   "refine": 9,
+   "cards": [
+    4141
+   ]
+  },
+  "shoes": {
+   "id": 15390,
+   "refine": 9,
+   "cards": [
+    13712
+   ]
+  },
+  "accessory": {
+   "id": 15384,
+   "refine": 0,
+   "cards": [
+    4405,
+    4405
+   ]
+  },
+  "accessory2": {
+   "id": 16314,
+   "refine": 0,
+   "cards": [
+    4405,
+    4405,
+    4405
+   ]
+  }
+ },
+ "skillKey": null,
+ "skillLv": 10,
+ "skills": {
+  "orphan/morroc-s-mark": 1,
+  "orphan/orphan-skills": 1,
+  "orphan/teleport": 1,
+  "orphan/heal": 1,
+  "orphan/warp-portal": 1,
+  "orphan/area-loot": 1,
+  "orphan/hiding": 1,
+  "orphan/increase-agility": 1,
+  "orphan/sense": 1,
+  "trickster/scythe-reap": 10,
+  "revenant/roaring-overslash": 10,
+  "dark-knight/blade-mastery": 10,
+  "dark-knight/flesh-mastery": 1,
+  "dark-knight/vengeance": 1,
+  "dark-knight/devil-raid": 5,
+  "dark-knight/fatal-menace": 10,
+  "dark-knight/knight-ritual": 8,
+  "dark-knight/harvest": 5,
+  "dark-knight/death-bound": 1,
+  "dark-knight/night-menace": 10,
+  "dark-knight/conflagration": 10,
+  "dark-knight/chilling-frost": 1,
+  "dark-knight/shatter-cross": 1,
+  "dark-knight/black-metal": 5,
+  "dark-knight/black-heart": 1
+ },
+ "skillPoints": null,
+ "anchor": null,
+ "hpOverride": null,
+ "manual": {},
+ "weaponElement": "Neutral",
+ "armorElement": "Neutral",
+ "seals": {
+  "odin": [
+   "AE",
+   "VA",
+   "VG",
+   "KA"
+  ],
+  "ama": [
+   "ZA",
+   "RI",
+   "JI",
+   "RE"
+  ]
+ }
+}

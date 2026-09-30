@@ -10,8 +10,12 @@ export type SimState = {
   mobName: string
   buffs: Record<string, boolean>
   food: { stat: StatKey; value: number }
-  /** timeline skill sequence (skill tree keys) */
-  rotation: string[]
+  /** timeline skill sequence (skill tree keys) — legacy, only read to migrate into `rotations` */
+  rotation?: string[]
+  /** timeline skill sequence (skill tree keys), per class */
+  rotations: Record<string, string[]>
+  /** HP during the rotation, in % of MaxHP (Dark Knight Harvest scales with missing HP) */
+  hpPct: number
 }
 
 const K_VARIANTS = 'rtm-planner:variants'
@@ -23,7 +27,8 @@ export const defaultSim = (buffDefaults: Record<string, boolean>): SimState => (
   mobName: 'Average Dummy',
   buffs: buffDefaults,
   food: { stat: 'luk', value: 0 },
-  rotation: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'],
+  rotations: { Revenant: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'] },
+  hpPct: 100,
 })
 
 const read = (k: string): unknown => {
@@ -49,7 +54,11 @@ export function loadSim(buffDefaults: Record<string, boolean>): SimState {
   const d = defaultSim(buffDefaults)
   const s = read(K_SIM) as Partial<SimState> | null
   if (!s || typeof s !== 'object') return d
-  return { ...d, ...s, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, food: { ...d.food, ...(s.food ?? {}) } }
+  // before 2026-09-30 there was a single rotation, always Revenant's
+  const rotations = s.rotations ?? (Array.isArray(s.rotation) ? { Revenant: s.rotation } : d.rotations)
+  const { rotation: _legacy, ...rest } = s
+  void _legacy
+  return { ...d, ...rest, rotations, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, food: { ...d.food, ...(s.food ?? {}) } }
 }
 export const saveSim = (s: SimState) => write(K_SIM, s)
 

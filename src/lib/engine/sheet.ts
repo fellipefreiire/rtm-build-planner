@@ -282,7 +282,7 @@ export function computeSheet(
   }
 
   // ---- Simulator buffs (the Planner passes empty toggles) ----
-  for (const bm of rules.buffMods(toggles)) {
+  for (const bm of rules.buffMods(toggles, { skills: build.skills, stats: build.stats })) {
     addMod(totals, { key: bm.key, value: bm.value, pct: bm.pct, cond: { t: 'always' }, src: { itemId: 0, line: -200 }, raw: bm.label }, 1)
   }
   if (food?.value) {

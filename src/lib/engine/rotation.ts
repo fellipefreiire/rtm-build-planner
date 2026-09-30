@@ -1,47 +1,19 @@
-// rotation: a hand-built skill sequence, simulated over time with Combo Ready,
-// Finisher Ready and Overslash stacks.
+// rotation: a hand-built skill sequence, simulated over time. This file holds what every class
+// shares (time, SP, cooldown, after cast delay, amotion, damage per cast); the states and the
+// per-skill rules come from the class module in rules/rotation/.
 import { Build, Item, Mob, Skill } from '@/lib/types'
 import { ClassRules } from '@/lib/rules/classes'
+import { CastCtx, CastPlan, LaneSpan, rotationRulesFor } from '@/lib/rules/rotation'
+import { emuAcdMs } from '@/lib/rules/server'
 import { computeSheet, StatSheet } from './sheet'
 import { simulate } from './simulate'
 import { spCost } from './fight'
 
-export const ROTATION_SKILLS = [
-  'trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/roaring-overslash', 'trickster/sweeping-slash',
-  'trickster/hellraiser', 'revenant/underworld-rainstorm', 'trickster/dark-message', 'revenant/flaming-wave',
-] as const
-
-const SCYTHE_REAP = 'trickster/scythe-reap'
-const REAPING = 'revenant/reaping-slash'
-const ROARING = 'revenant/roaring-overslash'
-const SWEEPING = 'trickster/sweeping-slash'
-const HELLRAISER = 'trickster/hellraiser'
-const UNDERWORLD = 'revenant/underworld-rainstorm'
-const DARK_MESSAGE = 'trickster/dark-message'
-
-/**
- * After cast delay of each skill, in ms, from the emulator (`db/re/skill_db.yml`, names of the
- * Royal Guard skills that Revenant inherits). The actual delay is `skill_delayfix` (skill.cpp:18207):
- * ACD × (150 − AGI)/150 (delay_dependon_agi) × (1 − After Cast Delay% from gear), minimum 0.1 s.
- */
-const ACD_MS: Record<string, (lv: number) => number> = {
-  'revenant/roaring-overslash': () => 1000,     // LG_OVERBRAND
-  'revenant/reaping-slash': () => 500,          // LG_MOONSLASHER
-  'trickster/scythe-reap': (lv) => 1100 - 100 * lv, // LK_SPIRALPIERCE: 1000 at Lv1 … 100 at Lv10
-  'revenant/underworld-rainstorm': () => 1000,  // WM_SEVERE_RAINSTORM
-  'trickster/dark-message': () => 500,          // SL_STIN
-  'trickster/sweeping-slash': () => 0,          // KN_PIERCE
-  'trickster/hellraiser': () => 0,              // RK_IGNITIONBREAK
-  'revenant/flaming-wave': () => 0,             // NC_FLAMELAUNCHER
-}
 const MIN_DELAY = 0.1 // min_skill_delay_limit: 100 ms
 // conf/battle/skill.conf: delay_rate 90 and casting_rate 90 (the server cuts 10% of ACD and cast time);
 // skill_amotion_leniency 100: every skill is also locked by the attack motion time (amotion = 2000 − 10 × ASPD, ms)
 const DELAY_RATE = 0.9
 const CAST_RATE = 0.9
-
-const MAX_STACKS = 5
-const STACK_TIME = 6
 
 export type RotationInput = {
   build: Build
@@ -54,6 +26,8 @@ export type RotationInput = {
   mob: Mob
   /** multiplies the engine index; null = relative index */
   k: number | null
+  /** HP during the rotation, in % of MaxHP (Dark Knight Harvest); default 100 */
+  hpPct?: number
 }
 
 export type RotationEvent = {
@@ -70,15 +44,19 @@ export type RotationEvent = {
   /** time waited for SP before casting (s) */
   waitedSp: number
   notes: string[]
+  /** skills cast by gear together with this one: no time, no SP */
+  autocasts: RotationEvent[]
+  /** on an autocast: what cast it */
+  by?: string
 }
 
-export type Span = { from: number; to: number }
-export type StackSpan = Span & { stacks: number }
+export type Span = LaneSpan
+export type StackSpan = LaneSpan & { stacks: number }
 
 export type RotationResult = {
   events: RotationEvent[]
-  /** state lanes over time: when each effect is active */
-  lanes: { comboReady: Span[]; finisherReady: Span[]; stacks: StackSpan[] }
+  /** state lanes over time, by the class lane id: when each effect is active */
+  lanes: Record<string, LaneSpan[]>
   total: number
   duration: number
   dps: number
@@ -89,24 +67,24 @@ const lvOf = (b: Build, s: Skill) => Math.min(b.skills[s.key] || s.maxLv, s.maxL
 
 export function runRotation(i: RotationInput): RotationResult {
   const { build, skills, rules } = i
+  const rr = rotationRulesFor(build.cls)
+  const hpPct = i.hpPct ?? 100
   const cache = new Map<string, { sheet: StatSheet; index: number }>()
-  // damage of 1 skill hit with the current state (Combo Ready changes Roaring's %)
-  const hitOf = (s: Skill, comboReady: boolean) => {
-    const key = `${s.key}|${comboReady}`
+  // damage of 1 hit of a skill at a level, with the cast's sheet toggles and forced element
+  const hitOf = (s: Skill, lv: number, sheetToggles: Record<string, boolean> = {}, element?: string) => {
+    const key = `${s.key}|${lv}|${JSON.stringify(sheetToggles)}|${element ?? ''}`
     let c = cache.get(key)
     if (!c) {
-      const b = { ...build, skillKey: s.key, anchor: null }
-      const toggles = { ...i.toggles, comboReady }
-      const sheet = computeSheet(b, i.byId, s, rules, toggles, i.food)
-      // Hellraiser is always Fire
-      const sh = s.key === HELLRAISER ? { ...sheet, weaponElement: { v: 'Fire', from: 'Hellraiser' } } : sheet
+      const b = { ...build, skills: { ...build.skills, [s.key]: lv }, skillKey: s.key, anchor: null }
+      const sheet = computeSheet(b, i.byId, s, rules, { ...i.toggles, ...sheetToggles }, i.food)
+      const sh = element ? { ...sheet, weaponElement: { v: element, from: s.name } } : sheet
       c = { sheet: sh, index: simulate(b, sh, i.mob).index }
       cache.set(key, c)
     }
     return c
   }
 
-  const base = hitOf(skills.get(ROARING) ?? [...skills.values()][0], true).sheet
+  const base = computeSheet({ ...build, skillKey: null, anchor: null }, i.byId, null, rules, i.toggles, i.food)
   const maxSp = base.maxSp?.v ?? 0
   const regenPct = (base.totals.pct.sp_regen ?? 0) + (base.totals.flat.sp_regen ?? 0)
   const isrLv = build.skills['trickster/increase-sp-recovery'] ?? 0
@@ -115,20 +93,64 @@ export function runRotation(i: RotationInput): RotationResult {
 
   let t = 0
   let sp = maxSp
-  let crUntil = -1
-  let frUntil = -1
-  let stacks = 0
-  let stacksUntil = -1
+  const state = rr.init()
+  const until: Record<string, number> = {}
+  const lanes: Record<string, LaneSpan[]> = Object.fromEntries(rr.lanes.map((l) => [l.id, []]))
   const ready = new Map<string, number>()
   const events: RotationEvent[] = []
-  const crSpans: Span[] = []
-  const frSpans: Span[] = []
-  const stackSpans: StackSpan[] = []
-  // renewing extends the open interval; otherwise opens a new one
-  const grant = (list: Span[], from: number, to: number) => {
-    const last = list[list.length - 1]
-    if (last && from <= last.to) last.to = Math.max(last.to, to)
-    else list.push({ from, to })
+
+  const ctxAt = (key: string, skill: Skill, lv: number, start: number): CastCtx => ({
+    key, skill, lv, start, build, byId: i.byId, toggles: i.toggles, hpPct, sheet: base, lanes,
+    active: (lane) => start <= (until[lane] ?? -1),
+    // renewing extends the open interval; otherwise opens a new one
+    grant: (lane, seconds) => {
+      const to = start + seconds
+      until[lane] = Math.max(until[lane] ?? -1, to)
+      const list = (lanes[lane] ??= [])
+      const last = list[list.length - 1]
+      if (last && start <= last.to) last.to = Math.max(last.to, to)
+      else list.push({ from: start, to })
+    },
+    consume: (lane) => {
+      until[lane] = start - 1e-9
+      const list = lanes[lane] ?? []
+      const last = list[list.length - 1]
+      if (last && last.to > start) last.to = start
+    },
+  })
+
+  // damage of a cast from its plan; notes explain what could not be modeled
+  const damageOf = (s: Skill, lv: number, plan: CastPlan, notes: string[]) => {
+    const d = s.damage
+    if (!d || d.magic) { notes.push(d?.magic ? 'magic damage: not modeled' : 'no damage formula'); return 0 }
+    const { sheet, index } = hitOf(s, lv, plan.sheetToggles, plan.element)
+    const pct = sheet.skillPct?.v ?? 0
+    const pctFactor = plan.pctAdd && pct > 0 ? (pct + plan.pctAdd) / pct : 1
+    return index * (i.k ?? 1) * plan.hits * plan.mult * pctFactor
+  }
+
+  const autocastEvents = (c: CastCtx, by: string): RotationEvent[] => {
+    const out: RotationEvent[] = []
+    for (const ac of rr.autocasts?.(c) ?? []) {
+      const as = skills.get(ac.key)
+      if (!as) continue
+      for (let n = 0; n < ac.times; n++) {
+        const ax = ctxAt(ac.key, as, ac.lv, c.start)
+        const cr = ax.active('comboReady')
+        const fr = ax.active('finisherReady')
+        const plan = rr.cast(ax, state)
+        const notes = [`autocast by ${by} (${ac.why})`, ...plan.notes]
+        const damage = damageOf(as, ac.lv, plan, notes)
+        rr.after(ax, state)
+        const stacks = rr.stacks?.(state) ?? 0
+        out.push({
+          skill: ac.key, name: as.name, start: c.start, end: c.start, comboReady: cr, finisherReady: fr,
+          stacksBefore: plan.stacksBefore ?? stacks, stacksAfter: stacks, hits: plan.hits, damage, waitedSp: 0,
+          notes, autocasts: [], by,
+        })
+      }
+    }
+    return out
   }
 
   for (const key of i.steps) {
@@ -139,7 +161,7 @@ export function runRotation(i: RotationInput): RotationResult {
     const notes: string[] = []
     let start = Math.max(t, ready.get(key) ?? 0)
     // SP: wait for regen if short
-    const sheetNow = hitOf(s, true).sheet
+    const sheetNow = hitOf(s, lv).sheet
     let cost = spCost(sheetNow, s, lv, sp + (start - t) * spPerSec).total
     let waited = 0
     sp = Math.min(maxSp, sp + (start - t) * spPerSec)
@@ -152,63 +174,21 @@ export function runRotation(i: RotationInput): RotationResult {
     }
     sp -= cost
 
-    if (start > stacksUntil) stacks = 0
-    const cr = start <= crUntil
-    const fr = start <= frUntil
-    const stacksBefore = stacks
-    let hits = 1
-    let mult = 1
-    let modeled = !!d && !d.magic
-
-    if (key === ROARING) {
-      // +1 hit per stack; Roaring does not consume the stacks [player report 2026-09-28]
-      hits = 1 + stacks
-      if (!cr) notes.push('without Combo Ready: reduced damage')
-      // Roaring consumes Finisher Ready [player report 2026-09-30]
-      if (fr) {
-        frUntil = start
-        const last = frSpans[frSpans.length - 1]
-        if (last && last.to > start) last.to = start
-      }
-    } else if (key === REAPING) {
-      mult = 1 + 0.05 * stacksBefore
-      // Finisher Ready (Hellraiser): Reaping goes straight to 5 [player report 2026-09-28]
-      if (fr) stacks = MAX_STACKS
-      else stacks = stacks === 0 ? 1 : cr ? Math.min(MAX_STACKS, stacks + 1) : stacks
-      stacksUntil = start + STACK_TIME
-      // stack lane: the previous segment ends here; the new value holds until it expires (or the next Reaping)
-      const prev = stackSpans[stackSpans.length - 1]
-      if (prev && prev.to > start) prev.to = start
-      stackSpans.push({ from: start, to: stacksUntil, stacks })
-      if (!cr && stacksBefore >= 1) notes.push('without Combo Ready: stays at 1 stack')
-    } else if (key === SWEEPING) {
-      hits = fr ? 3 : 2
-      if (!cr) { mult = 0.5; notes.push('outside combo: ×0.5 [estimated]') }
-    } else if (key === UNDERWORLD) {
-      hits = 15
-      mult = 1 + 0.04 * stacksBefore
-    }
-
-    let damage = 0
-    if (modeled && d) {
-      const { index } = hitOf(s, key === ROARING ? cr : true)
-      damage = index * (i.k ?? 1) * hits * mult
-    } else {
-      notes.push(d?.magic ? 'magic damage: not modeled' : 'no damage formula')
-      modeled = false
-    }
-
-    // states granted by the skill
-    const giveCr = key === SCYTHE_REAP ? 4
-      : key === SWEEPING && (build.skills['revenant/advanced-scythe-mastery'] ?? 0) > 0 ? 3
-      : key === DARK_MESSAGE ? lv : 0
-    if (giveCr) { crUntil = Math.max(crUntil, start + giveCr); grant(crSpans, start, start + giveCr) }
-    if (key === HELLRAISER) { frUntil = Math.max(frUntil, start + 5); grant(frSpans, start, start + 5) }
+    const c = ctxAt(key, s, lv, start)
+    const cr = c.active('comboReady')
+    const fr = c.active('finisherReady')
+    const plan = rr.cast(c, state)
+    const stacksBefore = plan.stacksBefore ?? rr.stacks?.(state) ?? 0
+    notes.push(...plan.notes)
+    const damage = damageOf(s, lv, plan, notes)
+    rr.after(c, state)
+    const autocasts = autocastEvents(c, s.name)
 
     const vct = (sheetNow.totals.pct.cast_time ?? 0) + (sheetNow.totals.flat.cast_time ?? 0)
     const cast = ((d?.castVar ?? 0) * Math.max(0, 1 + vct / 100) + (d?.castFixed ?? 0)) * CAST_RATE
     const acdPct = (sheetNow.totals.pct.after_cast_delay ?? 0) + (sheetNow.totals.flat.after_cast_delay ?? 0)
-    const acd = (ACD_MS[key]?.(lv) ?? 0) / 1000 * Math.max(0, 150 - sheetNow.stats.agi) / 150 * Math.max(0, 1 + acdPct / 100) * DELAY_RATE
+    const acdMs = rr.acdMs?.(key, lv) ?? emuAcdMs(s.icon, lv) ?? 0
+    const acd = acdMs / 1000 * Math.max(0, 150 - sheetNow.stats.agi) / 150 * Math.max(0, 1 + acdPct / 100) * DELAY_RATE
     const amotion = sheetNow.aspd ? Math.max(0, 2000 - 10 * sheetNow.aspd.v) / 1000 : 0
     const delay = Math.max(MIN_DELAY, acd, amotion)
     const end = start + cast + delay
@@ -217,21 +197,19 @@ export function runRotation(i: RotationInput): RotationResult {
 
     events.push({
       skill: key, name: s.name, start, end, comboReady: cr, finisherReady: fr,
-      stacksBefore, stacksAfter: stacks, hits, damage, waitedSp: waited, notes,
+      stacksBefore, stacksAfter: rr.stacks?.(state) ?? 0, hits: plan.hits, damage, waitedSp: waited, notes, autocasts,
     })
     t = end
   }
 
-  const total = events.reduce((a, e) => a + e.damage, 0)
+  const all = events.flatMap((e) => [e, ...e.autocasts])
+  const total = all.reduce((a, e) => a + e.damage, 0)
   const duration = events.length ? events[events.length - 1].end : 0
   const agg = new Map<string, { skill: string; name: string; casts: number; total: number; perCast: number }>()
-  for (const e of events) {
+  for (const e of all) {
     const a = agg.get(e.skill) ?? { skill: e.skill, name: e.name, casts: 0, total: 0, perCast: 0 }
     a.casts++; a.total += e.damage; a.perCast = a.total / a.casts
     agg.set(e.skill, a)
   }
-  return {
-    events, total, duration, dps: duration > 0 ? total / duration : 0, bySkill: [...agg.values()],
-    lanes: { comboReady: crSpans, finisherReady: frSpans, stacks: stackSpans },
-  }
+  return { events, total, duration, dps: duration > 0 ? total / duration : 0, bySkill: [...agg.values()], lanes }
 }
