@@ -527,6 +527,8 @@ section.col.center > .bd-window .bd-body { flex: 1 1 auto; min-height: 0; overfl
 *::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 *::-webkit-scrollbar-corner { background: transparent; }
 .bar-actions { margin-left: auto; display: flex; gap: 8px; }
+.build-pick { display: inline-flex; gap: 4px; align-items: center; margin-right: 12px; padding-right: 12px; border-right: 1px solid #2c2f38; }
+.build-pick select { max-width: 240px; }
 
 /* ---- Dream Enchants list in the modal ---- */
 .dream-row { display: flex; gap: 10px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; background: #15161a; }
@@ -618,6 +620,9 @@ main.cols.sim section.col.left { overflow-y: auto; }
 .tr-skill img { image-rendering: pixelated; }
 .tr-skill .tr-x { display: none; position: absolute; right: 1px; top: 0; background: none; border: none; color: var(--bad); padding: 0 2px; font-size: 12px; }
 .tr-skill:hover .tr-x { display: block; }
+/* autocast: fired by gear together with a step, takes no time */
+.tr-skill.auto { background: #2a2233; border-color: #6b4e7d; border-style: dotted; }
+.tr-skill .tr-n { font-size: 10px; color: var(--dim); padding: 0 2px; }
 .tr-bar { position: absolute; top: 6px; height: 18px; border-radius: 4px; font-size: 10.5px; display: flex; align-items: center; padding: 0 5px; overflow: hidden; white-space: nowrap; }
 .tr-bar.cr { background: rgba(127, 209, 139, .22); border: 1px solid #3d6b45; color: var(--ok); }
 .tr-bar.fr { background: rgba(229, 181, 103, .2); border: 1px solid #6b5a3d; color: var(--warn); }

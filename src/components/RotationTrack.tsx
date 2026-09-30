@@ -22,6 +22,17 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
   const width = Math.ceil(total * PX)
   const x = (t: number) => t * PX
   const ticks = Array.from({ length: Math.floor(total) + 1 }, (_, i) => i)
+  // autocasts fire at the start of the step that triggers them: same skill at the same moment becomes one icon "×N"
+  const autos = rot.events.flatMap((e) => {
+    const groups: { skill: string; name: string; start: number; n: number; damage: number; by: string }[] = []
+    for (const a of e.autocasts) {
+      const g = groups.find((x) => x.skill === a.skill)
+      if (g) { g.n++; g.damage += a.damage }
+      else groups.push({ skill: a.skill, name: a.name, start: a.start, n: 1, damage: a.damage, by: e.name })
+    }
+    // several skills from the same step sit side by side
+    return groups.map((g, i) => ({ ...g, offset: i * 30 }))
+  })
 
   // counted lanes (Overslash) get darker with more stacks
   const bars = (list: LaneSpan[], cls: string, label: (s: LaneSpan) => string) =>
@@ -38,6 +49,7 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
       <div className="track-labels">
         <div className="tr-label ruler" />
         <div className="tr-label">Skills</div>
+        {autos.length > 0 && <div className="tr-label">Autocast</div>}
         {lanes.map((l) => <div key={l.id} className="tr-label">{l.label}</div>)}
       </div>
       <div className="track-scroll">
@@ -59,6 +71,22 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
               )
             })}
           </div>
+          {autos.length > 0 && (
+            <div className="tr-row">
+              {ticks.map((t) => <span key={t} className="grid" style={{ left: x(t) }} />)}
+              {autos.map((a, i) => {
+                const s = skills.get(a.skill)
+                return (
+                  <div key={i} className="tr-skill auto" style={{ left: x(a.start) + a.offset }}
+                    title={`${a.name}${a.n > 1 ? ` ×${a.n}` : ''} · autocast by ${a.by} at ${a.start.toFixed(2)}s${a.damage ? ` · ${fmt(a.damage)}` : ''}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {s?.icon ? <img src={`skills/${s.icon}.png`} alt="" width={20} height={20} /> : <span className="dot" />}
+                    {a.n > 1 && <span className="tr-n">×{a.n}</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
           {lanes.map((l) => <div key={l.id} className="tr-row">{bars(rot.lanes[l.id] ?? [], l.cls, l.short)}</div>)}
         </div>
       </div>

@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Build, SlotId, StatKey } from '@/lib/types'
 import { byId, classByName, classes, skillByKey } from '@/lib/data'
 import { buildFromJson, buildToJson, decodeBuild, emptyBuild, isDecodeError, toggleSwitch } from '@/lib/build-url'
-
-const STORAGE_KEY = 'rtm-planner:build'
+import {
+  BuildList, activeBuild, addNew, duplicate, freeName, loadBuilds, newBuildId, remove, rename, saveBuilds, select,
+  setActiveBuild, single,
+} from '@/lib/build-store'
 import { computeSheet } from '@/lib/engine/sheet'
 import { rulesFor } from '@/lib/rules/classes'
 import { ELEMENTS } from '@/lib/rules/server'
@@ -18,7 +20,11 @@ import Simulator from '@/components/Simulator'
 import { K_TAB } from '@/lib/sim-store'
 
 export default function Page() {
-  const [build, setBuild] = useState<Build>(() => emptyBuild('Revenant'))
+  // several named builds; everything on the screen works on the active one (2026-09-30)
+  const [builds, setBuilds] = useState<BuildList>(() => single(emptyBuild('Revenant')))
+  const build = activeBuild(builds)
+  const setBuild = useCallback((b: Build | ((b: Build) => Build)) =>
+    setBuilds((s) => setActiveBuild(s, typeof b === 'function' ? b(activeBuild(s)) : b)), [])
   /** slot open in the edit modal */
   const [editing, setEditing] = useState<SlotId | null>(null)
   const [tab, setTab] = useState<'planner' | 'sim'>('planner')
@@ -31,32 +37,37 @@ export default function Page() {
   // --- state saved in the browser as JSON (2026-09-28: replaces the URL) ---
   const [loaded, setLoaded] = useState(false)
   useEffect(() => {
-    // old link with a #hash: import once and clear the URL
+    let storage: Storage | null = null
+    try { storage = localStorage } catch { /* browser without storage */ }
+    // the saved list; the single build of before 2026-09-30 becomes its first entry
+    let s = loadBuilds(storage)
+    // old link with a #hash: import once as a new build (does not overwrite a saved one) and clear the URL
     const h = window.location.hash.slice(1)
-    let b: Build | null = null
     if (h) {
       const d = decodeBuild(h)
       if (isDecodeError(d)) console.warn('build in URL discarded:', d.detail)
-      else b = d
+      else { const id = newBuildId(); s = { active: id, list: [...s.list, { id, name: freeName(s.list, d.cls), build: d }] } }
       window.history.replaceState(null, '', window.location.pathname)
     }
-    if (!b) {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY)
-        if (raw) {
-          const d = buildFromJson(raw)
-          if (isDecodeError(d)) console.warn('saved build discarded:', d.detail)
-          else b = d
-        }
-      } catch { /* browser without storage: keep the empty build */ }
-    }
-    if (b) setBuild(b)
+    setBuilds(s)
     setLoaded(true)
   }, [])
   useEffect(() => {
     if (!loaded) return
-    try { localStorage.setItem(STORAGE_KEY, buildToJson(build)) } catch { /* no storage */ }
-  }, [build, loaded])
+    let storage: Storage | null = null
+    try { storage = localStorage } catch { /* no storage */ }
+    saveBuilds(storage, builds)
+  }, [builds, loaded])
+
+  const activeName = builds.list.find((b) => b.id === builds.active)?.name ?? ''
+  const renameActive = () => {
+    const n = window.prompt('Build name:', activeName)
+    if (n) setBuilds((s) => rename(s, s.active, n))
+  }
+  const removeActive = () => {
+    if (builds.list.length <= 1) return
+    if (window.confirm(`Delete the build "${activeName}"? This cannot be undone.`)) setBuilds((s) => remove(s, s.active))
+  }
 
   const exportJson = async () => {
     const txt = buildToJson(build)
@@ -145,6 +156,15 @@ export default function Page() {
           </small>
         )}
         <span className="bar-actions">
+          <span className="build-pick">
+            <select value={builds.active} onChange={(e) => { const id = e.target.value; setBuilds((s) => select(s, id)) }} title="saved builds">
+              {builds.list.map((b) => <option key={b.id} value={b.id}>{b.name}{b.name.includes(b.build.cls) ? '' : ` · ${b.build.cls}`}</option>)}
+            </select>
+            <button onClick={() => setBuilds((s) => addNew(s, build.cls))} title={`new empty ${build.cls} build`}>New</button>
+            <button onClick={() => setBuilds(duplicate)} title="copy of this build">Duplicate</button>
+            <button onClick={renameActive} title="rename this build">Rename</button>
+            <button onClick={removeActive} disabled={builds.list.length <= 1} title="delete this build">Delete</button>
+          </span>
           <button onClick={exportJson} title="copy the build as JSON">Export JSON</button>
           <button onClick={importJson} title="paste a JSON or an old link">Import</button>
         </span>
