@@ -211,7 +211,6 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                       {e.comboReady && <span className="tag cr">CR</span>}
                       {e.finisherReady && <span className="tag fr">FR</span>}
                       {(e.stacksBefore > 0 || e.stacksAfter > 0) && <span className="tag st">◆ {e.stacksBefore}→{e.stacksAfter}</span>}
-                      {e.hits > 1 && <span className="tag">{e.hits} hits</span>}
                       {e.waitedSp > 0 && <span className="tag sp">SP</span>}
                       {first.rot.hp.max > 0 && (e.hp.cost > 0 || e.hp.leech > 0) && (
                         <span className="tag hp" title={`HP ${fmt(e.hp.before)} → ${fmt(e.hp.hit)} when it hits (cost ${fmt(e.hp.cost)}) → ${fmt(e.hp.after)} after leech +${fmt(e.hp.leech)}`}>

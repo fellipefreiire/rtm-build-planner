@@ -67,7 +67,7 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
               const s = skills.get(e.skill)
               return (
                 <div key={i} className={`tr-skill ${e.damage ? '' : 'zero'}`} style={{ left: x(e.start), width: Math.max(26, x(e.end - e.start)) }}
-                  title={`${e.name} · ${e.start.toFixed(2)}s → ${e.end.toFixed(2)}s${e.damage ? ` · ${fmt(e.damage)}` : ''}${e.hits > 1 ? ` · ${e.hits} hits` : ''}${e.notes.length ? ` · ${e.notes.join(' · ')}` : ''}`}>
+                  title={`${e.name} · ${e.start.toFixed(2)}s → ${e.end.toFixed(2)}s${e.damage ? ` · ${fmt(e.damage)}` : ''}${e.notes.length ? ` · ${e.notes.join(' · ')}` : ''}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {s?.icon ? <img src={`skills/${s.icon}.png`} alt="" width={20} height={20} /> : <span className="dot" />}
                   <button className="tr-x" title="remove" onClick={() => onRemove(i)}>×</button>

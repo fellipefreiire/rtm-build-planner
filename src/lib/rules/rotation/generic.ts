@@ -7,9 +7,6 @@ export const GENERIC_ROTATION: RotationRules<null> = {
   palette: (build, lineageSkills) => learned(build, lineageSkills),
   lanes: [],
   init: () => null,
-  cast: (c) => {
-    const hits = emuHits(c.skill.icon)
-    return { hits, mult: 1, pctAdd: 0, notes: hits > 1 ? [`${hits} hits [emu]`] : [] }
-  },
+  cast: (c) => ({ hits: emuHits(c.skill.icon), mult: 1, pctAdd: 0, notes: [] }),
   after: () => {},
 }

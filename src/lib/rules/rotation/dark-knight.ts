@@ -11,8 +11,16 @@ const CONFLAGRATION = 'dark-knight/conflagration'
 const SHATTER_CROSS = 'dark-knight/shatter-cross'
 const CHILLING_FROST = 'dark-knight/chilling-frost'
 
-/** Combo Ready from Devil Raid and Vengeance: the text says "enables Combo Ready for follow-up" with no duration [estimated] */
-const CR_TIME = 4
+/**
+ * Combo Ready duration, in s. The text only says "enables Combo Ready for follow-up"; the emulator has it:
+ * Devil Raid = TK_JUMPKICK Duration2 2000 ms (skill.cpp:1762), Vengeance = SM_BASH 3000 ms (skill.cpp:1442),
+ * Conflagration = WL_HELLINFERNO Duration2 1750…4000 ms, which matches its text (1.5 + 0.25 s per level). [emu]
+ */
+const CR_TIME: Record<string, (lv: number) => number> = {
+  [DEVIL_RAID]: () => 2,
+  [VENGEANCE]: () => 3,
+  [CONFLAGRATION]: (lv) => 1.5 + 0.25 * lv,
+}
 
 /**
  * HP each skill takes from CURRENT HP, from the skill text. Harvest reads the HP AFTER the skill pays it:
@@ -47,7 +55,6 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
     // Night Menace, Devil Raid and Vengeance hit twice (HitCount 2 in the emulator); Night Menace measured
     // in-game 2026-09-30: 2240 without Combo Ready and 5200 with it, against 2270 and 5276 with 2 hits
     let hits = emuHits(c.skill.icon)
-    if (hits > 1) notes.push(`${hits} hits [emu]`)
     let mult = 1
     let pctAdd = 0
     const add = (v: number, why: string) => { pctAdd += v; notes.push(`+${Math.round(v)}% ${why}`) }
@@ -78,8 +85,8 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
   },
 
   after: (c) => {
-    if (c.key === DEVIL_RAID || c.key === VENGEANCE) c.grant('comboReady', CR_TIME)
-    if (c.key === CONFLAGRATION) c.grant('comboReady', 1.5 + 0.25 * c.lv)
+    const cr = CR_TIME[c.key]
+    if (cr) c.grant('comboReady', cr(c.lv))
   },
 
   // no cast time, no SP, outside the cooldown, with the Combo Ready of the moment [estimated]

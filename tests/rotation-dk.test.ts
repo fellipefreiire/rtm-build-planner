@@ -40,6 +40,15 @@ describe('rotation: Dark Knight', () => {
     expect(r.events[1].damage / alone.damage).toBeCloseTo((pct + 3 * sheet.stats.str) / pct, 6)
   })
 
+  it('Combo Ready lasts 2 s after Devil Raid, 3 s after Vengeance and 1.5 + 0.25 s/level after Conflagration (emulator)', () => {
+    const b = dk()
+    delete b.slots.mid // no Vengeance autocast extending the Devil Raid window
+    const span = (steps: string[]) => { const l = run(steps, {}, 100, b).lanes.comboReady[0]; return l.to - l.from }
+    expect(span([DR])).toBeCloseTo(2, 6)
+    expect(span([V])).toBeCloseTo(3, 6)
+    expect(span(['dark-knight/conflagration'])).toBeCloseTo(1.5 + 0.25 * 10, 6)
+  })
+
   it('Black Metal doubles Devil Raid (plus its own ATK +10)', () => {
     const on = run([DR], { blackMetal: true }).events[0]
     const off = run([DR], { blackMetal: false }).events[0]
