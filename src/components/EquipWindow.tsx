@@ -24,6 +24,8 @@ type Props = {
   build: Build
   active: SlotId | null
   onClear: (slot: SlotId) => void
+  /** unequip every slot, switch reserves included */
+  onClearAll?: () => void
   onOpen: (slot: SlotId) => void
   /** swap the active item with the slot's reserve */
   onSwitch?: (slot: SlotId) => void
@@ -124,6 +126,14 @@ export default function EquipWindow(props: Props) {
         <span>⛨</span> Equipment
         <span style={{ marginLeft: 'auto', fontWeight: 400 }}>
           <small>{equipped} equipped</small>
+          {props.onClearAll && (
+            <button
+              className="eq-clear-all"
+              disabled={equipped === 0 && !Object.keys(props.build.swaps ?? {}).length}
+              onClick={() => { if (window.confirm('Unequip all items (switch reserves included)?')) props.onClearAll!() }}
+              title="unequip every slot; stats, skills and seals stay"
+            >clear all</button>
+          )}
         </span>
       </div>
       <div className="eq-tabs">

@@ -681,3 +681,6 @@ main.cols.sim { grid-template-columns: minmax(360px, 400px) 1fr; }
 .sl-tier { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); min-width: 7.5em; }
 .sl-word { color: var(--fg); }
 .st-gear.neg { color: var(--bad); }
+.eq-clear-all { margin-left: 10px; padding: 1px 8px; font-size: 11px; font-weight: 400; color: var(--dim); }
+.eq-clear-all:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
+.eq-clear-all:disabled { opacity: .4; cursor: default; }

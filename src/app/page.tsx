@@ -177,6 +177,7 @@ export default function Page() {
             build={build}
             active={editing}
             onClear={(slot) => patch((b) => { delete b.slots[slot]; return b })}
+            onClearAll={() => patch((b) => { b.slots = {}; delete b.swaps; delete b.swapSide; return b })}
             onOpen={setEditing}
             onSwitch={(slot) => patch((b) => toggleSwitch(b, slot))}
             onSeals={(sys, ids) => patch((b) => { b.seals = { ...(b.seals ?? {}), [sys]: ids }; return b })}
