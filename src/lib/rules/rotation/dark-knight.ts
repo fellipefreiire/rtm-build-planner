@@ -17,8 +17,7 @@ const CR_TIME = 4
 /**
  * HP each skill takes from CURRENT HP, from the skill text. Harvest reads the HP AFTER the skill pays it:
  * measured in-game 2026-09-30 (lv47), Night Menace at full HP in Harvest hit 3250 — the formula at 80% HP
- * gives ~3350, at 100% ~2390. The HP input of the Simulator is the HP before the cast; it does not move
- * between steps (costs, leech and regen are not simulated).
+ * gives ~3350, at 100% ~2390. The engine pays it before the damage and passes the HP left as `hpPct`.
  */
 const HP_COST: Record<string, (lv: number) => number> = {
   [NIGHT_MENACE]: () => 20,           // "Costs 20% of current HP to cast"
@@ -34,15 +33,14 @@ const HP_COST: Record<string, (lv: number) => number> = {
 export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
   palette: (build, lineageSkills) => learned(build, lineageSkills),
   lanes: [{ id: 'comboReady', label: 'Combo Ready', cls: 'cr', short: () => 'CR' }],
+  hpCost: (key, lv) => HP_COST[key]?.(lv) ?? 0,
   init: () => null,
 
   cast: (c) => {
     const cr = c.active('comboReady')
     const harvest = !!c.toggles.harvest
-    const cost = HP_COST[c.key]?.(c.lv) ?? 0
-    // HP after paying the skill's own cost, in % of MaxHP
-    const hpAfter = c.hpPct * (1 - cost / 100)
-    const missing = Math.max(0, Math.round((100 - hpAfter) * 10) / 10)
+    // c.hpPct is already the HP after the skill paid its own cost
+    const missing = Math.max(0, Math.round((100 - c.hpPct) * 10) / 10)
     const str = c.sheet.stats.str
     const maxHp = c.sheet.maxHp?.v ?? 0
     const notes: string[] = []
@@ -76,7 +74,6 @@ export const DARK_KNIGHT_ROTATION: RotationRules<null> = {
     } else if (c.key === CHILLING_FROST) {
       if (harvest && missing) add(missing, `Harvest (base +1% × ${missing}% HP missing) [estimated]`)
     }
-    if (cost) notes.push(`costs ${cost}% of current HP: HP ${c.hpPct}% → ${Math.round(hpAfter)}% when it hits`)
     return { hits, mult, pctAdd, notes }
   },
 

@@ -26,7 +26,7 @@ export type RotationInput = {
   mob: Mob
   /** multiplies the engine index; null = relative index */
   k: number | null
-  /** HP during the rotation, in % of MaxHP (Dark Knight Harvest); default 100 */
+  /** HP at the start of the rotation, in % of MaxHP; default 100 */
   hpPct?: number
 }
 
@@ -48,7 +48,11 @@ export type RotationEvent = {
   autocasts: RotationEvent[]
   /** on an autocast: what cast it */
   by?: string
+  /** HP (absolute): at the cast after regen, when it hits (after its own cost), and after the leech */
+  hp: { before: number; hit: number; after: number; cost: number; leech: number }
 }
+
+export type HpPoint = { t: number; pct: number }
 
 export type Span = LaneSpan
 export type StackSpan = LaneSpan & { stacks: number }
@@ -61,6 +65,8 @@ export type RotationResult = {
   duration: number
   dps: number
   bySkill: { skill: string; name: string; casts: number; total: number; perCast: number }[]
+  /** HP over time, in % of MaxHP; `leech` and `regen` per second used [emu / db] */
+  hp: { max: number; series: HpPoint[]; regenPerSec: number; leechPower: number; leechChance: number }
 }
 
 const lvOf = (b: Build, s: Skill) => Math.min(b.skills[s.key] || s.maxLv, s.maxLv)
@@ -68,7 +74,6 @@ const lvOf = (b: Build, s: Skill) => Math.min(b.skills[s.key] || s.maxLv, s.maxL
 export function runRotation(i: RotationInput): RotationResult {
   const { build, skills, rules } = i
   const rr = rotationRulesFor(build.cls)
-  const hpPct = i.hpPct ?? 100
   const cache = new Map<string, { sheet: StatSheet; index: number }>()
   // damage of 1 hit of a skill at a level, with the cast's sheet toggles and forced element
   const hitOf = (s: Skill, lv: number, sheetToggles: Record<string, boolean> = {}, element?: string) => {
@@ -91,6 +96,32 @@ export function runRotation(i: RotationInput): RotationResult {
   const spPerSec = (Math.floor(1 + base.stats.int / 6 + maxSp / 100) * (1 + regenPct / 100)) / 8
     + (isrLv > 0 ? (isrLv / 10) * (20 + maxSp / 100) / 4.5 : 0)
 
+  // ---- HP: costs, leech and natural regen; Harvest reads it ----
+  const maxHp = base.maxHp?.v ?? 0
+  let hp = maxHp * Math.min(100, Math.max(1, i.hpPct ?? 100)) / 100
+  // natural regen [emu]: every 2 s, (1 + VIT/5 + MaxHP/200) × HP Regen% (status.cpp:5416, player.conf natural_healhp_interval)
+  const hpRegenPct = (base.totals.pct.hp_regen ?? 0) + (base.totals.flat.hp_regen ?? 0)
+  const regenPerSec = (1 + Math.floor(base.stats.vit / 5) + Math.floor(maxHp / 200)) * Math.max(0, 1 + hpRegenPct / 100) / 2
+  // leech: heal = damage × Leech Power, on a Leech Rate chance (expected value; rate above 100% changes nothing)
+  const leechPower = base.leechPower.v
+  const leechRate = (base.totals.pct.leech_rate ?? 0) + (base.totals.flat.leech_rate ?? 0)
+  const leechChance = Math.min(1, Math.max(0, leechRate / 100))
+  const pctOf = (x: number) => (maxHp > 0 ? (x / maxHp) * 100 : 100)
+  const series: { t: number; pct: number }[] = [{ t: 0, pct: pctOf(hp) }]
+  let hpT = 0
+  const regenTo = (at: number) => {
+    if (at > hpT) {
+      hp = Math.min(maxHp, hp + (at - hpT) * regenPerSec)
+      series.push({ t: at, pct: pctOf(hp) })
+      hpT = at
+    }
+  }
+  const heal = (dmg: number) => {
+    const v = dmg * leechPower / 100 * leechChance
+    hp = Math.min(maxHp, hp + v)
+    return v
+  }
+
   let t = 0
   let sp = maxSp
   const state = rr.init()
@@ -100,7 +131,7 @@ export function runRotation(i: RotationInput): RotationResult {
   const events: RotationEvent[] = []
 
   const ctxAt = (key: string, skill: Skill, lv: number, start: number): CastCtx => ({
-    key, skill, lv, start, build, byId: i.byId, toggles: i.toggles, hpPct, sheet: base, lanes,
+    key, skill, lv, start, build, byId: i.byId, toggles: i.toggles, hpPct: pctOf(hp), sheet: base, lanes,
     active: (lane) => start <= (until[lane] ?? -1),
     // renewing extends the open interval; otherwise opens a new one
     grant: (lane, seconds) => {
@@ -138,15 +169,17 @@ export function runRotation(i: RotationInput): RotationResult {
         const ax = ctxAt(ac.key, as, ac.lv, c.start)
         const cr = ax.active('comboReady')
         const fr = ax.active('finisherReady')
+        const before = hp
         const plan = rr.cast(ax, state)
-        const notes = [`autocast by ${by} (${ac.why})`, ...plan.notes]
+        const notes = [`autocast by ${by} (${ac.why}): no HP cost`, ...plan.notes]
         const damage = damageOf(as, ac.lv, plan, notes)
+        const leech = heal(damage)
         rr.after(ax, state)
         const stacks = rr.stacks?.(state) ?? 0
         out.push({
           skill: ac.key, name: as.name, start: c.start, end: c.start, comboReady: cr, finisherReady: fr,
           stacksBefore: plan.stacksBefore ?? stacks, stacksAfter: stacks, hits: plan.hits, damage, waitedSp: 0,
-          notes, autocasts: [], by,
+          notes, autocasts: [], by, hp: { before, hit: before, after: hp, cost: 0, leech },
         })
       }
     }
@@ -174,6 +207,18 @@ export function runRotation(i: RotationInput): RotationResult {
     }
     sp -= cost
 
+    // HP: regen up to the cast, then the skill pays its cost (never below 1), then the damage
+    regenTo(start)
+    const hpBefore = hp
+    const costPct = rr.hpCost?.(key, lv) ?? 0
+    let hpCost = 0
+    if (costPct > 0) {
+      hpCost = Math.min(Math.trunc(hp * costPct / 100), Math.max(0, hp - 1))
+      hp -= hpCost
+      if (hp <= 1) notes.push('not enough HP: stays at 1')
+      series.push({ t: start, pct: pctOf(hp) })
+    }
+    const hpHit = hp
     const c = ctxAt(key, s, lv, start)
     const cr = c.active('comboReady')
     const fr = c.active('finisherReady')
@@ -181,8 +226,13 @@ export function runRotation(i: RotationInput): RotationResult {
     const stacksBefore = plan.stacksBefore ?? rr.stacks?.(state) ?? 0
     notes.push(...plan.notes)
     const damage = damageOf(s, lv, plan, notes)
+    const leech = heal(damage)
     rr.after(c, state)
     const autocasts = autocastEvents(c, s.name)
+    series.push({ t: start, pct: pctOf(hp) })
+    if (costPct > 0 || leech > 0) {
+      notes.push(`HP ${Math.round(pctOf(hpBefore))}%${hpCost ? ` − ${hpCost} (${costPct}% of current) → ${Math.round(pctOf(hpHit))}% when it hits` : ''}${leech > 0 ? `, leech +${Math.round(leech)}` : ''} → ${Math.round(pctOf(hp))}%`)
+    }
 
     const vct = (sheetNow.totals.pct.cast_time ?? 0) + (sheetNow.totals.flat.cast_time ?? 0)
     const cast = ((d?.castVar ?? 0) * Math.max(0, 1 + vct / 100) + (d?.castFixed ?? 0)) * CAST_RATE
@@ -198,6 +248,7 @@ export function runRotation(i: RotationInput): RotationResult {
     events.push({
       skill: key, name: s.name, start, end, comboReady: cr, finisherReady: fr,
       stacksBefore, stacksAfter: rr.stacks?.(state) ?? 0, hits: plan.hits, damage, waitedSp: waited, notes, autocasts,
+      hp: { before: hpBefore, hit: hpHit, after: hp, cost: hpCost, leech: leech + autocasts.reduce((a, x) => a + x.hp.leech, 0) },
     })
     t = end
   }
@@ -211,5 +262,9 @@ export function runRotation(i: RotationInput): RotationResult {
     a.casts++; a.total += e.damage; a.perCast = a.total / a.casts
     agg.set(e.skill, a)
   }
-  return { events, total, duration, dps: duration > 0 ? total / duration : 0, bySkill: [...agg.values()], lanes }
+  regenTo(duration)
+  return {
+    events, total, duration, dps: duration > 0 ? total / duration : 0, bySkill: [...agg.values()], lanes,
+    hp: { max: maxHp, series, regenPerSec, leechPower, leechChance },
+  }
 }

@@ -15,7 +15,7 @@ export type CastCtx = {
   build: Build
   byId: Map<number, Item>
   toggles: Record<string, boolean>
-  /** HP during the rotation, in % of MaxHP (Simulator input) */
+  /** HP when the cast hits, in % of MaxHP: after regen and after the skill paid its own HP cost */
   hpPct: number
   /** sheet without a chosen skill: stats and MaxHP */
   sheet: StatSheet
@@ -52,6 +52,8 @@ export type RotationRules<S = unknown> = {
   lanes: LaneDef[]
   /** after cast delay in ms; undefined = the emulator's, by icon */
   acdMs?: (key: string, lv: number) => number | undefined
+  /** HP the skill takes, in % of CURRENT HP, paid before the damage (autocasts pay nothing) */
+  hpCost?: (key: string, lv: number) => number
   init: () => S
   /** runs before the damage: may change the class state; returns how the cast hits */
   cast: (c: CastCtx, s: S) => CastPlan

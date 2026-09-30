@@ -4,6 +4,9 @@ import { RotationResult } from '@/lib/engine/rotation'
 import { LaneDef, LaneSpan } from '@/lib/rules/rotation'
 
 const PX = 90 // pixels per second
+const HP_H = 44 // height of the HP lane
+/** y of an HP % inside the HP lane (100% at the top) */
+const yHp = (pct: number) => 3 + (1 - Math.max(0, Math.min(100, pct)) / 100) * (HP_H - 6)
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 
 /**
@@ -50,6 +53,7 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
         <div className="tr-label ruler" />
         <div className="tr-label">Skills</div>
         {autos.length > 0 && <div className="tr-label">Autocast</div>}
+        <div className="tr-label hp">HP</div>
         {lanes.map((l) => <div key={l.id} className="tr-label">{l.label}</div>)}
       </div>
       <div className="track-scroll">
@@ -87,6 +91,22 @@ export default function RotationTrack({ rot, skills, lanes, onRemove }: {
               })}
             </div>
           )}
+          <div className="tr-row hp" title={`HP over the rotation: skill costs, leech (power ${rot.hp.leechPower}%, chance ${Math.round(rot.hp.leechChance * 100)}%) and natural regen ${Math.round(rot.hp.regenPerSec)} HP/s`}>
+            {ticks.map((t) => <span key={t} className="grid" style={{ left: x(t) }} />)}
+            <svg width={width} height={HP_H} className="hp-svg">
+              <line x1={0} x2={width} y1={yHp(50)} y2={yHp(50)} className="hp-mid" />
+              <polyline points={rot.hp.series.map((p) => `${x(p.t)},${yHp(p.pct)}`).join(' ')} className="hp-line" />
+              {rot.events.map((e, i) => {
+                const pct = rot.hp.max ? (e.hp.hit / rot.hp.max) * 100 : 100
+                return (
+                  <g key={i}>
+                    <circle cx={x(e.start)} cy={yHp(pct)} r={3} className="hp-dot" />
+                    <text x={x(e.start) + 4} y={Math.max(9, yHp(pct) - 3)} className="hp-txt">{Math.round(pct)}%</text>
+                  </g>
+                )
+              })}
+            </svg>
+          </div>
           {lanes.map((l) => <div key={l.id} className="tr-row">{bars(rot.lanes[l.id] ?? [], l.cls, l.short)}</div>)}
         </div>
       </div>

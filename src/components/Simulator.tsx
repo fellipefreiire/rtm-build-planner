@@ -150,9 +150,9 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                 <span>{t.label}</span>
               </label>
             ))}
-            {hasHarvest && (
-              <div className="sim-row" title="Harvest scales with missing HP. The HP stays at this value for the whole rotation (costs, leech and regen are not simulated).">
-                <span>HP during rotation</span>
+            {(
+              <div className="sim-row" title={`HP at the start of the rotation. From there the simulator applies each skill's HP cost, leech and natural regen${hasHarvest ? '; Harvest reads the HP when each skill hits' : ''}.`}>
+                <span>HP at start</span>
                 <input type="number" min={1} max={100} value={sim.hpPct} style={{ width: '4em' }}
                   onChange={(e) => { const v = Math.max(1, Math.min(100, Number(e.target.value) || 100)); set((s) => { s.hpPct = v; return s }) }} />
                 <small>%</small>
@@ -213,6 +213,11 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                       {(e.stacksBefore > 0 || e.stacksAfter > 0) && <span className="tag st">◆ {e.stacksBefore}→{e.stacksAfter}</span>}
                       {e.hits > 1 && <span className="tag">{e.hits} hits</span>}
                       {e.waitedSp > 0 && <span className="tag sp">SP</span>}
+                      {first.rot.hp.max > 0 && (e.hp.cost > 0 || e.hp.leech > 0) && (
+                        <span className="tag hp" title={`HP ${fmt(e.hp.before)} → ${fmt(e.hp.hit)} when it hits (cost ${fmt(e.hp.cost)}) → ${fmt(e.hp.after)} after leech +${fmt(e.hp.leech)}`}>
+                          HP {Math.round((e.hp.hit / first.rot.hp.max) * 100)}%
+                        </span>
+                      )}
                       {autoTags(e.autocasts).map((a) => <span key={a.name} className="tag" title={a.notes}>+{a.name}{a.n > 1 ? ` ×${a.n}` : ''}</span>)}
                     </div>
                   )}
@@ -221,7 +226,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
               )
             })}
           </div>
-          <div className="sim-in"><small>{legend} SP = waited to regenerate · +Skill = autocast by gear (no time, no SP), its damage after the +· time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
+          <div className="sim-in"><small>{legend} HP = HP when the skill hits (after its own cost) · SP = waited to regenerate · +Skill = autocast by gear (no time, no SP), its damage after the +· time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
         </div>
 
         <div className="eq-window sim-box">

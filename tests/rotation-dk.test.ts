@@ -96,7 +96,25 @@ describe('rotation: Dark Knight', () => {
     const within = (x: number, game: number) => expect(Math.abs(x / game - 1)).toBeLessThan(0.04)
     within(run([DR], hv, 100, b).events[0].damage, 1350)
     within(run([NM], hv, 100, b).events[0].damage, 3250)
-    // right after Devil Raid (which took ~10% of the HP): Night Menace with Combo Ready
-    within(run([DR, NM], hv, 90, b).events[1].damage, 9026)
+    // right after Devil Raid, from full HP: the engine chains the costs (100% → 90% → 72%)
+    within(run([DR, NM], hv, 100, b).events[1].damage, 9026)
+  })
+
+  it('HP over the rotation: cost before the damage, leech after, regen between casts, never above max', () => {
+    const b = dk()
+    const r = run([NM], { harvest: true }, 100, b)
+    const e = r.events[0]
+    expect(e.hp.before).toBeCloseTo(r.hp.max, 6)
+    expect(e.hp.hit).toBeCloseTo(r.hp.max - Math.trunc(r.hp.max * 0.2), 6) // Night Menace takes 20% of current HP
+    // leech = damage (with its autocast) × power × chance
+    const dmg = e.damage + e.autocasts.reduce((a, x) => a + x.damage, 0)
+    expect(e.hp.leech).toBeCloseTo(dmg * r.hp.leechPower / 100 * r.hp.leechChance, 6)
+    expect(e.hp.after).toBeLessThanOrEqual(r.hp.max + 1e-9)
+    expect(r.hp.series.every((p) => p.pct <= 100 + 1e-9)).toBe(true)
+    // regen between two Night Menaces (the second waits for the 5 s cooldown)
+    const two = run([NM, NM], { harvest: false }, 50, b)
+    const [a, c] = two.events
+    const expected = Math.min(two.hp.max, a.hp.after + (c.start - a.start) * two.hp.regenPerSec)
+    expect(c.hp.before).toBeCloseTo(expected, 6)
   })
 })

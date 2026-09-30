@@ -14,7 +14,7 @@ export type SimState = {
   rotation?: string[]
   /** timeline skill sequence (skill tree keys), per class */
   rotations: Record<string, string[]>
-  /** HP during the rotation, in % of MaxHP (Dark Knight Harvest scales with missing HP) */
+  /** HP at the start of the rotation, in % of MaxHP; the engine applies costs, leech and regen from there */
   hpPct: number
 }
 
