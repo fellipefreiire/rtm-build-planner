@@ -117,7 +117,7 @@ function condMultiplier(
     case 'refine_min': return refine >= c.n ? 1 : 0
     case 'level_min': return baseLv >= c.n ? 1 : 0
     case 'per_refine': return Math.floor(refine / Math.max(1, c.each))
-    case 'per_stat': return stats ? Math.floor(stats[c.stat] / Math.max(1, c.each)) : null
+    case 'per_stat': return stats ? Math.floor(stats[c.stat] / Math.max(1, c.each)) : null  // `stats` is base or total, per c.base
     // "Every level of X or Y": SUMS the levels of both. Measured on 2026-09-28 (Ominous Lament): Roaring +89% and
     // Reaping +40% in @battlestats, crit 117 in the window — they only add up with 2% × (10 + 10)
     case 'per_skill_lv': return c.skills.reduce((a, k) => a + (skills[k] ?? 0), 0)
@@ -344,8 +344,19 @@ export function computeSheet(
   ) as Record<StatKey, number>
 
   // ---- pass 2: what depends on stats ----
-  for (const { m, refine } of pending) {
-    const mult = condMultiplier(m, refine, build.baseLv, stats)
+  for (const { m, refine, itemName } of pending) {
+    if (m.cond.t === 'per_stat' && m.cond.members) {
+      // set bonus "Max HP +20 per base INT": once per set, and only with every piece
+      const k = `${m.cond.set}|perstat|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
+      if (seenSetBonus.has(k)) continue
+      seenSetBonus.add(k)
+      const missing = m.cond.members.filter((n) => !wearing.has(n))
+      if (missing.length) {
+        skipped.push({ raw: m.raw, itemName, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
+        continue
+      }
+    }
+    const mult = condMultiplier(m, refine, build.baseLv, m.cond.t === 'per_stat' && m.cond.base ? statsBase : stats)
     if (mult) addMod(totals, m, mult)
   }
 

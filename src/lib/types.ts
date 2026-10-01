@@ -66,7 +66,8 @@ export type Cond =
   | { t: 'set_refine'; ns: number[]; set: string; members?: string[] }
   /** "With two of these equipped": N copies of the same item (cards) */
   | { t: 'copies_min'; n: number }
-  | { t: 'per_stat'; stat: StatKey; each: number }
+  /** `base`: "per base INT" reads the allocated stat; `set`/`members`: inside a set block, once per set and only complete */
+  | { t: 'per_stat'; stat: StatKey; each: number; base?: boolean; set?: string; members?: string[] }
   /** "For each base stat over 98": × how many BASE stats (allocated, no gear) are ≥ n — readparam(bStr) etc. [emu] */
   | { t: 'per_base_stat_min'; n: number }
   /** × allocated skill level; with several skills, the HIGHEST level counts (one or the other, not the sum) */

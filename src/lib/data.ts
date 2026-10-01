@@ -24,11 +24,17 @@ export const classByName = new Map(classes.map((c) => [c.name, c]))
 /**
  * Who can equip it: no list = everyone. The dump also has "All except Orphan" (and Bouncer,
  * Prowler, Judge) — 344 items that used to vanish from every other class's picker.
+ * In an exclusion list the classes after the first entry are excluded too:
+ * ["All except Bouncer", "Dark Knight", …] keeps the Dark Knight OUT (Fleinn, Jitte).
  */
+const exclusionList = (jobs: string[]) => {
+  const first = /^All except (.+)$/i.exec(jobs[0] ?? '')?.[1]
+  return first == null ? null : [...first.split(/\s*,\s*|\s+and\s+/), ...jobs.slice(1)]
+}
 export const canEquip = (it: Item, cls: string) => {
-  if (!it.jobs || it.jobs.includes(cls)) return true
-  const except = it.jobs.map((j) => /^All except (.+)$/i.exec(j)?.[1]).filter(Boolean) as string[]
-  return except.length > 0 && !except.some((x) => x.split(/\s*,\s*|\s+and\s+/).includes(cls))
+  if (!it.jobs) return true
+  const except = exclusionList(it.jobs)
+  return except ? !except.includes(cls) : it.jobs.includes(cls)
 }
 
 /**
@@ -54,7 +60,7 @@ export function allowedCats(from: string, cls: string): Set<string> | null {
   for (const i of items) {
     if (i.grp === 'Card' || !i.slots.includes(from)) continue
     total++
-    if (i.jobs?.includes(cls)) { explicitCount++; cats.add(i.cat) }
+    if (i.jobs && !exclusionList(i.jobs) && i.jobs.includes(cls)) { explicitCount++; cats.add(i.cat) }
   }
   const out = total && explicitCount / total >= MIN_SAMPLE ? cats : null
   catCache.set(key, out)

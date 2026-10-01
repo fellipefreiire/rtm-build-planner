@@ -138,7 +138,7 @@ const RE = {
   suffixPerRefine: /\s+per\s+(?:(\d+)\s+)?(refines?|upgrades?)$/i,
   slashUpgrade: /\/\s*upgrade$/i,
   // HP +2 per VIT
-  suffixPerStat: /\s+per\s+(?:(\d+)\s+)?(?:base\s+)?(str|agi|vit|int|dex|luk)$/i,
+  suffixPerStat: /\s+per\s+(?:(\d+)\s+)?(base\s+)?(str|agi|vit|int|dex|luk)$/i,
   chance: /^\s*(\d+(?:[.,]\d+)?)\s*%?\s*chance/i,
   situational: /\b(when|while|if|during|after|upon|every\s+\d+\s+sec|for\s+\d+\s+sec|chance)\b/i,
   dmgVs: /^(?:dmg|damage|atk)\s+(?:vs|against|to)\s+(?<t>[A-Za-z /]+?)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
@@ -363,7 +363,9 @@ export function parseDesc(desc, itemId) {
       lineCond = { t: 'per_refine', each: 1 }
       l = l.replace(RE.slashUpgrade, '').trim()
     } else if ((m = RE.suffixPerStat.exec(l))) {
-      lineCond = { t: 'per_stat', stat: m[2].toLowerCase(), each: m[1] ? +m[1] : 1 }
+      // inside "X Set Bonus:" it stays a set bonus: without the set it applied once per piece
+      lineCond = { t: 'per_stat', stat: m[3].toLowerCase(), each: m[1] ? +m[1] : 1,
+        ...(m[2] ? { base: true } : {}), ...(cond.t === 'set_bonus' ? { set: cond.set } : {}) }
       l = l.slice(0, m.index).trim()
     }
 

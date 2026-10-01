@@ -209,7 +209,7 @@ function main() {
     for (const m of it.mods) {
       if (m.cond.t === 'set_bonus') m.cond.members = [...setMembers[m.cond.set]].sort()
       // "Per total set refine" inside a set block: same pieces, and the refine that counts is their sum
-      if ((m.cond.t === 'per_set_refine' || m.cond.t === 'set_refine') && m.cond.set && setMembers[m.cond.set]) m.cond.members = [...setMembers[m.cond.set]].sort()
+      if ((m.cond.t === 'per_set_refine' || m.cond.t === 'set_refine' || m.cond.t === 'per_stat') && m.cond.set && setMembers[m.cond.set]) m.cond.members = [...setMembers[m.cond.set]].sort()
     }
   }
   const unnamedSets = setMembers.set?.size ?? 0

@@ -3,6 +3,7 @@
 // of the recomputation on its own.
 import { Build, Item, Mob, Skill, SLOTS, SlotId } from '@/lib/types'
 import { ClassRules } from '@/lib/rules/classes'
+import { canEquip } from '@/lib/data'
 import { computeSheet } from './sheet'
 import { simulate } from './simulate'
 
@@ -29,7 +30,6 @@ export type SuggestDeps = {
   mob: Mob
 }
 
-const canEquip = (it: Item, cls: string) => !it.jobs || it.jobs.includes(cls)
 
 function evaluate(b: Build, d: SuggestDeps) {
   const sheet = computeSheet(b, d.byId, d.skill, d.rules, d.toggles)
