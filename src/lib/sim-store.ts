@@ -16,6 +16,10 @@ export type SimState = {
   rotations: Record<string, string[]>
   /** HP at the start of the rotation, in % of MaxHP; the engine applies costs, leech and regen from there */
   hpPct: number
+  /** skill level used in the rotation, per class and skill key (absent = learned level) */
+  skillLv: Record<string, Record<string, number>>
+  /** value lanes shown on the rotation track */
+  lanesShown: { hp: boolean; sp: boolean; shield: boolean }
 }
 
 const K_VARIANTS = 'rtm-planner:variants'
@@ -29,6 +33,8 @@ export const defaultSim = (buffDefaults: Record<string, boolean>): SimState => (
   food: { stat: 'luk', value: 0 },
   rotations: { Revenant: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'] },
   hpPct: 100,
+  lanesShown: { hp: true, sp: true, shield: true },
+  skillLv: {},
 })
 
 const read = (k: string): unknown => {
@@ -56,9 +62,20 @@ export function loadSim(buffDefaults: Record<string, boolean>): SimState {
   if (!s || typeof s !== 'object') return d
   // before 2026-09-30 there was a single rotation, always Revenant's
   const rotations = s.rotations ?? (Array.isArray(s.rotation) ? { Revenant: s.rotation } : d.rotations)
+  // 2026-10-01: the per-step level ("key@lv") became one level per skill; the last step's level wins
+  const skillLv: Record<string, Record<string, number>> = { ...(s.skillLv ?? {}) }
+  for (const [cls, steps] of Object.entries(rotations)) {
+    rotations[cls] = steps.map((st) => {
+      const at = st.lastIndexOf('@')
+      if (at < 0) return st
+      const lv = Number(st.slice(at + 1))
+      if (Number.isInteger(lv) && lv > 0) (skillLv[cls] ??= {})[st.slice(0, at)] = lv
+      return st.slice(0, at)
+    })
+  }
   const { rotation: _legacy, ...rest } = s
   void _legacy
-  return { ...d, ...rest, rotations, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, food: { ...d.food, ...(s.food ?? {}) } }
+  return { ...d, ...rest, rotations, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, food: { ...d.food, ...(s.food ?? {}) }, lanesShown: { ...d.lanesShown, ...(s.lanesShown ?? {}) }, skillLv }
 }
 export const saveSim = (s: SimState) => write(K_SIM, s)
 

@@ -55,9 +55,29 @@ export const ITEM_OVERRIDES = {
     desc: [['Raises your MaxHP limit\nby 10,000', 'MaxHP Limit +10000']],
     why: 'same MaxHP ceiling as Valhalla Knight Card, split across two lines with a comma [db]',
   },
+  'Mind Vessel Card': {
+    desc: [['SP Regen 10%+1% per 2 base LUK', 'SP Regen +10%\nSP Regen +1% per 2 base LUK']],
+    why: '"10%+1% per 2 base LUK" on one line does not match the parser; split into the flat part and the per-base-LUK part [db]',
+  },
   'Sage Ring': {
     refinable: false,
     why: 'in-game it is not refinable, even though the dump says refine=1 [player report 2026-09-18]',
+  },
+}
+
+/**
+ * Skill text corrections, by skill key: `desc` = [[dump text, corrected text]] pairs applied
+ * before parsing the formula. Every entry needs a `why`.
+ */
+export const SKILL_OVERRIDES = {
+  'revenant/phantom-slice': {
+    desc: [['Damage is 100+20% +2% per Vit.', 'Damage is 200+20% per level +2% per Vit.']],
+    why: 'in-game tooltip says "Damage is 200+20% +2% per Vit." (dump says 100); the emulator has 200 + 20×lv + 2×VIT (battle.cpp:4541) [in-game 2026-10-01]',
+  },
+  'revenant/haunting-slice': {
+    // no damage number anywhere: a 0% formula carries the cooldown; the rotation marks it "no formula"
+    desc: [['Damage is fixed based on ATK and Str.', 'Damage is 0+0% per level.']],
+    why: '"Damage is fixed based on ATK and Str." has no number; 0% keeps the skill in the rotation with its 7 s cooldown and SP cost [in-game 2026-10-01]',
   },
 }
 

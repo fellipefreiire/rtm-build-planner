@@ -5,6 +5,7 @@ import { learned, RotationRules } from './types'
 export const REVENANT_SKILLS = [
   'trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/roaring-overslash', 'trickster/sweeping-slash',
   'trickster/hellraiser', 'revenant/underworld-rainstorm', 'trickster/dark-message', 'revenant/flaming-wave',
+  'revenant/phantom-slice', 'revenant/haunting-slice',
 ] as const
 
 const SCYTHE_REAP = 'trickster/scythe-reap'
@@ -14,6 +15,7 @@ const SWEEPING = 'trickster/sweeping-slash'
 const HELLRAISER = 'trickster/hellraiser'
 const UNDERWORLD = 'revenant/underworld-rainstorm'
 const DARK_MESSAGE = 'trickster/dark-message'
+const HAUNTING = 'revenant/haunting-slice'
 
 const MAX_STACKS = 5
 const STACK_TIME = 6
@@ -77,6 +79,11 @@ export const REVENANT_ROTATION: RotationRules<State> = {
     } else if (c.key === SWEEPING) {
       hits = fr ? 3 : 2
       if (!cr) { mult = 0.5; notes.push('outside combo: ×0.5 [estimated]') }
+    } else if (c.key === HAUNTING) {
+      // "Damage is fixed based on ATK and Str": no number in the dump or in-game [in-game 2026-10-01]
+      mult = 0
+      notes.push('no damage formula ("fixed based on ATK and Str"): counted as 0')
+      if (c.lv < 5) notes.push(`${20 * c.lv}% chance to autocast Scythe Reap: not counted (only Lv5 is a sure proc)`)
     } else if (c.key === UNDERWORLD) {
       hits = 15
       mult = 1 + 0.04 * before
@@ -88,6 +95,14 @@ export const REVENANT_ROTATION: RotationRules<State> = {
       sheetToggles: { comboReady: c.key === ROARING ? cr : true },
       ...(c.key === HELLRAISER ? { element: 'Fire' } : {}),
     }
+  },
+
+  // Haunting Slice: 20%/level chance to autocast Scythe Reap at Haunting's level [in-game 2026-10-01;
+  // the dump's "numbers" says 5%]. Only a sure proc (Lv5) is cast; below that it is a note.
+  autocasts: (c) => {
+    if (c.key !== HAUNTING) return []
+    const chance = 20 * c.lv
+    return chance >= 100 ? [{ key: SCYTHE_REAP, lv: c.lv, times: 1, why: `${chance}% chance at Lv${c.lv}` }] : []
   },
 
   after: (c) => {

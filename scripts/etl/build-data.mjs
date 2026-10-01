@@ -8,7 +8,7 @@ import * as dump from './dump.mjs'
 import { parseDesc } from './effects.mjs'
 import { parseSkillFormula } from './skills.mjs'
 import { classTree, jobCaps, lineage } from './classlines.mjs'
-import { ITEM_OVERRIDES, isRefinable } from './overrides.mjs'
+import { ITEM_OVERRIDES, SKILL_OVERRIDES, isRefinable } from './overrides.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = join(HERE, '../../src/data')
@@ -242,7 +242,12 @@ function main() {
   const TYPES = rawSkills.types || []
   const skillsOut = []
   for (const s of skills) {
-    const f = parseSkillFormula(s.desc)
+    let desc = s.desc
+    for (const [from, to] of SKILL_OVERRIDES[s.key]?.desc ?? []) {
+      if (!String(desc).includes(from)) throw new Error(`${s.key}: override text not found: ${from}`)
+      desc = String(desc).replace(from, to)
+    }
+    const f = parseSkillFormula(desc)
     const type = TYPES[s.type] ?? null
     skillsOut.push({
       key: s.key,

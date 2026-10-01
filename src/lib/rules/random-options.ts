@@ -169,6 +169,13 @@ export const FIXED: Record<string, OptionTable> = {
 }
 
 /**
+ * Regular gear whose description says "Has Shadow Random Options": they roll the shadow table
+ * (a stat +1, then a skill DMG +5%). The 3 items with that line in the dump of 2026-09-28;
+ * in-game: Dandelion Eyepatch with VIT +1 and Burning Spiral DMG +5% [in-game 2026-10-01].
+ */
+const SHADOW_OPTIONS_ON = new Set(['Dandelion Eyepatch', 'Kafra Uniform', 'Kafra Sandals'])
+
+/**
  * Runes: the emulator's mob_db gives every rune drop `RandomOptionGroup: manual` (one line, a stat +1) [emu].
  * The emulator is outdated here: Othila Rune of Blood has no drop there and rolls in-game
  * [player report 2026-09-28], so every rune with a drop in the dump gets the table.
@@ -186,6 +193,7 @@ export function effectivePicks(table: OptionTable, picks: ({ key: string; v: num
 export function optionTableFor(item: Item | undefined, slot: SlotId): OptionTable | null {
   if (!item || item.grp === 'Card') return null
   if (FIXED[item.name]) return FIXED[item.name]
+  if (SHADOW_OPTIONS_ON.has(item.name)) return TABLES.shadow
   // NPC, quest or trade items do not roll random options (Sage Ring, Caelum, tomes…) [player report 2026-09-28]
   if (!item.dropped) return null
   switch (slot) {

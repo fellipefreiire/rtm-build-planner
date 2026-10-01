@@ -631,6 +631,19 @@ main.cols.sim section.col.left { overflow-y: auto; }
 .hp-mid { stroke: #3a2a2e; stroke-dasharray: 3 3; }
 .hp-dot { fill: #e0707a; }
 .hp-txt { fill: var(--dim); font-size: 9.5px; }
+.tr-label.sp, .tr-row.sp { height: 78px; }
+.tr-label.shield, .tr-row.shield { height: 44px; }
+.sp-line { fill: none; stroke: #6ea8fe; stroke-width: 1.5; }
+.sp-base { stroke: #23252c; }
+.sp-dot { fill: #6ea8fe; }
+.sp-dot.wait { fill: var(--warn); }
+.sp-tick { stroke: #2c3442; stroke-dasharray: 2 2; }
+.sp-txt { font-size: 10px; }
+.sp-cost { fill: #e0707a; }
+.sp-left { fill: #a9c8ff; font-weight: 600; }
+.sh-line { fill: none; stroke: #c9a0ff; stroke-width: 1.5; }
+.sh-dot { fill: #c9a0ff; }
+.lane-toggles { display: flex; gap: 12px; align-items: center; padding: 6px 10px 2px; }
 .tr-bar { position: absolute; top: 6px; height: 18px; border-radius: 4px; font-size: 10.5px; display: flex; align-items: center; padding: 0 5px; overflow: hidden; white-space: nowrap; }
 .tr-bar.cr { background: rgba(127, 209, 139, .22); border: 1px solid #3d6b45; color: var(--ok); }
 .tr-bar.fr { background: rgba(229, 181, 103, .2); border: 1px solid #6b5a3d; color: var(--warn); }
@@ -697,3 +710,12 @@ main.cols.sim { grid-template-columns: minmax(360px, 400px) 1fr; }
 .eq-clear-all { margin-left: 10px; padding: 1px 8px; font-size: 11px; font-weight: 400; color: var(--dim); }
 .eq-clear-all:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); }
 .eq-clear-all:disabled { opacity: .4; cursor: default; }
+
+/* skill level: chosen in the palette, shown on the cards when below the learned one */
+.pal-group { display: inline-flex; align-items: center; gap: 4px; }
+.pal-lv { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--dim); }
+.pal-lv select { font-size: 11px; padding: 1px 2px; }
+.pal-lv.low { color: var(--warn); }
+.pal-lv.low select { border-color: var(--warn); color: var(--warn); }
+.tl-lv { font-size: 10.5px; margin: 2px 0; }
+.tl-lv.low { color: var(--warn); }

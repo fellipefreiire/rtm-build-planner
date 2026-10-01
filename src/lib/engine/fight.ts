@@ -47,15 +47,25 @@ export function spCost(sheet: StatSheet, skill: Skill, lv: number, currentSp: nu
 /** Cost at full SP: the most expensive a cast can be. */
 export const spPerCast = (sheet: StatSheet, skill: Skill, lv: number) => spCost(sheet, skill, lv, sheet.maxSp?.v ?? 0).total
 
+/**
+ * SP regeneration as measured on RTM [measured 2026-09 / local server 2026-09-29]:
+ * natural tick every 1.2 s of floor(1 + INT/6 + MaxSP/100) × (1 + SP Regen%) — 21 SP/1.2 s measured at
+ * MaxSP 544, INT 41, +75%; and Increase SP Recovery (lv/10) × (20 + 1% MaxSP) every 4.5 s, which
+ * SP Regen% does NOT multiply [measured]. The emulator's 8 s interval undercounted it by ~2×.
+ */
+export const SP_TICK = 1.2
+export const ISR_TICK = 4.5
+export function spRegen(sheet: StatSheet, isrLv: number) {
+  const maxSp = sheet.maxSp?.v ?? 0
+  const regenPct = (sheet.totals.pct.sp_regen ?? 0) + (sheet.totals.flat.sp_regen ?? 0)
+  const natural = Math.floor((1 + Math.floor(sheet.stats.int / 6) + Math.floor(maxSp / 100)) * Math.max(0, 1 + regenPct / 100))
+  const isr = isrLv > 0 ? Math.floor((Math.min(isrLv, 10) / 10) * (20 + maxSp / 100)) : 0
+  return { maxSp, natural, isr, perSec: natural / SP_TICK + isr / ISR_TICK }
+}
+
 export function runFight(i: FightInput): FightResult {
-  const maxSp = i.sheet.maxSp?.v ?? 0
-  const int = i.sheet.stats.int
-  const regenPct = (i.sheet.totals.pct.sp_regen ?? 0) + (i.sheet.totals.flat.sp_regen ?? 0)
-  // natural regen [emu]: 1 + INT/6 + MaxSP/100 every 8 s, × SP Regen%
-  const natural = Math.floor(1 + int / 6 + maxSp / 100) * (1 + regenPct / 100)
-  // Increase SP Recovery [player report]: 20 + 1% of MaxSP every 4.5 s at Lv10; SP Regen% does not multiply it (measured)
-  const isr = i.isrLv > 0 ? (i.isrLv / 10) * (20 + maxSp / 100) : 0
-  const spRegenPerMin = natural * (60 / 8) + isr * (60 / 4.5)
+  const { maxSp, natural, isr, perSec } = spRegen(i.sheet, i.isrLv)
+  const spRegenPerMin = perSec * 60
 
   let sp = maxSp
   let t = 0
@@ -63,14 +73,14 @@ export function runFight(i: FightInput): FightResult {
   let casts = 0
   let total = 0
   let spOutAt: number | null = null
-  let nextNat = 8
-  let nextIsr = 4.5
+  let nextNat = SP_TICK
+  let nextIsr = ISR_TICK
   const series: number[] = []
   let nextSec = 1
 
   while (t <= i.duration + 1e-9) {
-    if (t >= nextNat) { sp = Math.min(maxSp, sp + natural); nextNat += 8 }
-    if (isr && t >= nextIsr) { sp = Math.min(maxSp, sp + isr); nextIsr += 4.5 }
+    while (t >= nextNat - 1e-9) { sp = Math.min(maxSp, sp + natural); nextNat += SP_TICK }
+    while (isr && t >= nextIsr - 1e-9) { sp = Math.min(maxSp, sp + isr); nextIsr += ISR_TICK }
     if (t >= ready) {
       const cost = spCost(i.sheet, i.skill, i.skillLv, sp).total
       if (sp >= cost) {

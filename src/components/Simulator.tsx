@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Build, Skill, SlotId, SLOTS, StatKey, STATS } from '@/lib/types'
 import { byId, classByName, mobs, skillByKey } from '@/lib/data'
-import { runRotation } from '@/lib/engine/rotation'
+import { learnedLv, parseStep, runRotation } from '@/lib/engine/rotation'
 import { learnedToggles, rulesFor } from '@/lib/rules/classes'
 import { rotationRulesFor } from '@/lib/rules/rotation'
 import { SimState, loadSim, saveSim } from '@/lib/sim-store'
@@ -53,6 +53,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
   }, [rr, build])
   // one rotation per class, so switching class does not mix skills
   const rotation = useMemo(() => sim?.rotations[build.cls] ?? [], [sim, build.cls])
+  const levels = useMemo(() => sim?.skillLv?.[build.cls] ?? {}, [sim, build.cls])
 
   const result = useMemo(() => {
     if (!sim) return null
@@ -63,7 +64,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
     const out = rows.map((r) => ({
       ...r,
       rot: runRotation({
-        build: r.build, byId, steps: rotation, skills: skillByKey, rules,
+        build: r.build, byId, steps: rotation, levels, skills: skillByKey, rules,
         toggles: learnedToggles(rules, r.build.skills, sim.buffs), food, mob, k, hpPct: sim.hpPct,
       }),
     }))
@@ -73,7 +74,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
     const statsBase = computeSheet(cur, byId, ref, rules, {}, null)
     const statsBuffed = computeSheet(cur, byId, ref, rules, learnedToggles(rules, build.skills, sim.buffs), food)
     return { out, mob, statsBase, statsBuffed }
-  }, [sim, rows, rules, build, rotation, palette])
+  }, [sim, rows, rules, build, rotation, levels, palette])
 
   if (!sim || !result) return <div style={{ padding: 20 }}><small>loading…</small></div>
   const set = (f: (s: SimState) => SimState) => setSim((s) => (s ? f(structuredClone(s)) : s))
@@ -173,12 +174,29 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
           <div className="eq-title"><span>✚</span> Skills <small style={{ marginLeft: 8 }}>click to add to the end of the rotation</small></div>
           <div className="palette">
             {palette.length === 0 && <small>No rotation skill learned in the Skill Tree.</small>}
-            {palette.map((s) => (
-              <button key={s.key} className="pal-skill" title={s.damage?.formulaRaw ?? s.name}
-                onClick={() => setRotation((r) => [...r, s.key])}>
-                <SkillIcon s={s} /> <span>{s.name}</span>
-              </button>
-            ))}
+            {palette.map((s) => {
+              const learned = learnedLv(build, s)
+              const lv = Math.min(levels[s.key] ?? learned, learned)
+              return (
+                <span key={s.key} className="pal-group">
+                  <button className="pal-skill" title={s.damage?.formulaRaw ?? s.name}
+                    onClick={() => setRotation((r) => [...r, s.key])}>
+                    <SkillIcon s={s} /> <span>{s.name}</span>
+                  </button>
+                  {learned > 1 && (
+                    <label className={`pal-lv ${lv < learned ? 'low' : ''}`} title={`Level used by every ${s.name} in the rotation (learned: ${learned}). Lower levels cost less SP and deal less damage.`}>
+                      Lv
+                      <select value={lv} onChange={(ev) => {
+                        const v = Number(ev.target.value)
+                        set((st) => { const m = (st.skillLv[build.cls] ??= {}); if (v >= learned) delete m[s.key]; else m[s.key] = v; return st })
+                      }}>
+                        {Array.from({ length: learned }, (_, n) => learned - n).map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </span>
+              )
+            })}
           </div>
         </div>
 
@@ -191,14 +209,29 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
             </span>
           </div>
           {first && rotation.length > 0 && (
-            <RotationTrack rot={first.rot} skills={skillByKey} lanes={rr.lanes}
+            <div className="lane-toggles">
+              <small>Show:</small>
+              {([['hp', 'HP'], ['sp', 'SP'], ...(first.rot.shield ? [['shield', 'Shield']] : [])] as const).map(([id, label]) => (
+                <label key={id} className="sim-chk">
+                  <input type="checkbox" checked={sim.lanesShown[id as 'hp']}
+                    onChange={(e) => { const v = e.target.checked; set((s) => { s.lanesShown[id as 'hp'] = v; return s }) }} />
+                  <span>{label}</span>
+                </label>
+              ))}
+              <small className="dim">SP regen {first.rot.sp.perSec.toFixed(1)}/s · MaxSP {fmt(first.rot.sp.max)}</small>
+            </div>
+          )}
+          {first && rotation.length > 0 && (
+            <RotationTrack rot={first.rot} skills={skillByKey} lanes={rr.lanes} show={sim.lanesShown}
               onRemove={(i) => setRotation((r) => r.filter((_, j) => j !== i))} />
           )}
           <div className="timeline">
             {rotation.length === 0 && <small>Build the rotation by clicking the skills above.</small>}
-            {rotation.map((key, i) => {
+            {rotation.map((step, i) => {
+              const { key } = parseStep(step)
               const s = skillByKey.get(key)
               const e = first?.rot.events[i]
+              const learned = s ? learnedLv(build, s) : 1
               return (
                 <div key={i} className={`tl-step ${e && !e.damage ? 'zero' : ''}`} title={e?.notes.join(' · ') || undefined}>
                   <div className="tl-head">
@@ -206,12 +239,16 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                     <button className="eq-x" title="remove" onClick={() => setRotation((r) => r.filter((_, j) => j !== i))}>×</button>
                   </div>
                   <div className="tl-main"><SkillIcon s={s} size={22} /><span>{s?.name ?? key}</span></div>
+                  {e && e.lv < learned && <span className="tl-lv low" title={`level chosen in Skills (learned: ${learned})`}>Lv {e.lv}</span>}
                   {e && (
                     <div className="tl-tags">
                       {e.comboReady && <span className="tag cr">CR</span>}
                       {e.finisherReady && <span className="tag fr">FR</span>}
                       {(e.stacksBefore > 0 || e.stacksAfter > 0) && <span className="tag st">◆ {e.stacksBefore}→{e.stacksAfter}</span>}
-                      {e.waitedSp > 0 && <span className="tag sp">SP</span>}
+                      <span className={`tag ${e.waitedSp > 0 ? 'sp' : ''}`}
+                        title={`SP ${fmt(e.sp.before)} − ${fmt(e.sp.cost)}${e.sp.pctPart ? ` (${fmt(e.sp.flat)} flat + ${fmt(e.sp.pctPart)} from % of current SP)` : ''} = ${fmt(e.sp.after)}${e.waitedSp > 0 ? ` · waited ${e.waitedSp.toFixed(1)} s for SP` : ''}`}>
+                        SP −{fmt(e.sp.cost)} → {fmt(e.sp.after)}
+                      </span>
                       {first.rot.hp.max > 0 && (e.hp.cost > 0 || e.hp.leech > 0) && (
                         <span className="tag hp" title={`HP ${fmt(e.hp.before)} → ${fmt(e.hp.hit)} when it hits (cost ${fmt(e.hp.cost)}) → ${fmt(e.hp.after)} after leech +${fmt(e.hp.leech)}`}>
                           HP {Math.round((e.hp.hit / first.rot.hp.max) * 100)}%
@@ -225,7 +262,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
               )
             })}
           </div>
-          <div className="sim-in"><small>{legend} HP = HP when the skill hits (after its own cost) · SP = waited to regenerate · +Skill = autocast by gear (no time, no SP), its damage after the +· time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
+          <div className="sim-in"><small>{legend} HP = HP when the skill hits (after its own cost) · SP −cost → left (yellow = waited for SP to regenerate) · +Skill = autocast by gear (no time, no SP), its damage after the +· time = cast + after cast delay (emu: ACD × (150 − AGI)/150 × gear ACD%). Hover a step to see the notes.</small></div>
         </div>
 
         <div className="eq-window sim-box">
