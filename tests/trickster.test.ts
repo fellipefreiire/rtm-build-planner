@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeSheet } from '@/lib/engine/sheet'
 import { runRotation } from '@/lib/engine/rotation'
+import { simulate } from '@/lib/engine/simulate'
 import { rulesFor, learnedToggles } from '@/lib/rules/classes'
 import { rotationRulesFor } from '@/lib/rules/rotation'
 import { emptyBuild } from '@/lib/build-url'
@@ -82,5 +83,21 @@ describe('Dark Messenger', () => {
     expect(cold.hits).toBe(7)
     expect(combo.comboReady).toBe(true)
     expect(combo.damage / cold.damage).toBeCloseTo(1.5, 1)
+  })
+})
+
+describe('Magic damage from gear', () => {
+  it('Arch Brooch "Magic Damage +7%" and "Dark Magic DMG" raise Dark Messenger; physical skills untouched', () => {
+    const dmg = (key: string, acc: string | null) => {
+      const b = trickster()
+      b.skillKey = key; b.skillLv = 5
+      if (acc) b.slots.accessory = { id: find(acc).id, refine: 0, cards: [] }
+      return simulate(b, computeSheet(b, byId, skillMap.get(key)!, rulesFor('Trickster'), {}), mobBy('Average Dummy')).index
+    }
+    expect(find('Arch Brooch').mods[0]).toMatchObject({ key: 'magic_dmg', value: 7 })
+    expect(dmg(DM, 'Arch Brooch') / dmg(DM, null)).toBeCloseTo(1.07, 6)
+    expect(dmg(SR, 'Arch Brooch')).toBeCloseTo(dmg(SR, null), 6)
+    // Fallen Angel Muffler: Dark Magic DMG +15%, and Dark Beak makes Dark Messenger Dark
+    expect(find('Fallen Angel Muffler').mods.some((m) => m.key === 'magic_dmg' && m.scope?.element === 'dark')).toBe(true)
   })
 })

@@ -86,7 +86,7 @@ export const TEMPLES: Record<SealSystem, Temple> = {
     pair: {
       W: ['KIRI 斬', e('+3% melee physical', [m('melee_dmg', 3, true)])],
       V: ['SHASEI 射', e('+3% ranged physical', [m('ranged_dmg', 3, true)])],
-      M: ['JUEN 呪', e('+3% magic damage', null)],
+      M: ['JUEN 呪', e('+3% magic damage', [m('magic_dmg', 3, true)])],
       D: ['HAYATE 迅', e('+2% ASPD & Crit +5', [m('aspd', 2, true), m('crit_rate', 5)])],
     },
     focus: {

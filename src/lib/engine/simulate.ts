@@ -60,10 +60,14 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   // magic skills (Conflagration): MATK × skill % × skill boost × skill element × MDEF, no crit, no physical pools
   // or penetration. Hard MDEF as in renewal: (1000 + MDEF) / (1000 + 10 × MDEF); soft MDEF is ignored [emu, simplified]
   const mdefCut = (1000 + mob.mdef) / (1000 + 10 * mob.mdef)
+  // "Magic Damage +7%" (Arch Brooch) and "Dark Magic DMG +10%": overall + the skill's element (weapon element for Dark Messenger)
+  const magicAll = sheet.totals.pct.magic_dmg ?? 0
+  const magicEl = sc.magic_dmg?.[lower(sheet.weaponElement.v)] ?? 0
   const layers: Layer[] = sheet.magic ? [
     { label: 'MATK', mult: sheet.matk.v, why: sheet.matk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
+    { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${sheet.weaponElement.v} magic damage` },
     { label: 'target MDEF', mult: mdefCut, why: `MDEF ${mob.mdef}: (1000 + MDEF) / (1000 + 10 × MDEF), soft MDEF ignored [emu, simplified]` },
     { label: 'skill element', mult: elemAtk, why: `${sheet.weaponElement.v} (${sheet.weaponElement.from}) vs ${mob.element} ${mob.elv}` },
   ] : [

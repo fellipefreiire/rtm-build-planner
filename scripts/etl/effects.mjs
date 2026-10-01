@@ -15,7 +15,7 @@ export const MOD_KEYS = new Set([
   'resist_element', 'resist_race', 'resist_boss',
   'skill_dmg', 'skill_lv', 'skill_sp_cost', 'skill_cooldown', 'skill_duration',
   'resist_status', 'dmg_vs_nonboss', 'resist_nonboss',
-  'melee_dmg', 'ranged_dmg', 'dmg_pct', 'shadow_parry', 'drop_rate',
+  'melee_dmg', 'ranged_dmg', 'magic_dmg', 'dmg_pct', 'shadow_parry', 'drop_rate',
   'dmg_taken', 'reflect_melee', 'double_attack_rate', 'auto_guard',
   'resist_melee', 'resist_long', 'resist_matk', 'resist_misc', 'fixed_cast',
   // 2026-09-29: "Resistance vs All Sizes" used to land in resist_race; "Damage Reduction +5%"
@@ -41,7 +41,7 @@ const ALIAS = new Map(Object.entries({
   'hp/sp': ['hp', 'sp'], 'hp and sp': ['hp', 'sp'],
   atk: ['atk'], attack: ['atk'], matk: ['matk'], 'atk/matk': ['atk', 'matk'],
   def: ['def'], 'total def': ['def'], defense: ['def'],
-  mdef: ['mdef'], 'magic def': ['mdef'], 'magic defense': ['mdef'],
+  mdef: ['mdef'], 'magic attack': ['matk'], 'magic def': ['mdef'], 'magic defense': ['mdef'],
   'move speed': ['move_speed'], 'movement speed': ['move_speed'], 'walk speed': ['move_speed'],
   'perfect dodge': ['perfect_dodge'], 'perfect hit': ['perfect_hit'],
   aspd: ['aspd'], 'aspd limit': ['aspd_limit'], 'attack speed': ['aspd'],
@@ -488,6 +488,24 @@ export function parseDesc(desc, itemId) {
     }
 
     if (RE.activationDelay.test(l)) { drop('sem_numero'); return } // informational, not a bonus
+    // "Magic Damage +7%", "Dark Magic DMG+10%", "Fire, Water, Wind and Earth magic DMG +20%",
+    // "Water-element magic damage +2% per refine": magic damage, overall or for the skill's element.
+    // Used to fall into skillDmgAfter as a skill called "magic" / "fire magic" and count for nothing (2026-10-01)
+    if ((m = /^(?<els>[a-z ,\/-]*?)\s*(?:-?element(?:al)?\s+)?magic(?:al)?\s+(?:dmg|damage)(?:\s+vs\s+all\s+sizes)?\s*(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%(?<pr>\s+per\s+refine)?$/i.exec(l))) {
+      const els = norm(m.groups.els).replace(/-$/, '').trim()
+      const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
+      const c = m.groups.pr ? { t: 'per_refine', each: 1 } : lineCond
+      if (els === '' || els === 'final' || els === 'all elemental' || els === 'all') {
+        mods.push(mk('magic_dmg', v, true, c, null, src, raw)); return
+      }
+      const list = els.split(/\s*,\s*|\s*\/\s*|\s+and\s+/).filter(Boolean)
+      if (list.every((e) => ELEMENTS.includes(e))) {
+        for (const e of list) mods.push(mk('magic_dmg', v, true, c, { element: e }, src, raw))
+        return
+      }
+      // "Real Magic Damage" is the Real Magic Attack skill: falls through to skillDmgAfter
+      if (els !== 'real') { drop('forma_desconhecida'); return }  // "Natural elements", "Other elements": which elements is not stated
+    }
     if ((m = RE.skillDmgAfter.exec(l))) {
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
       for (const sk of norm(m.groups.s).split(/\s*,\s*|\s+and\s+/).filter(Boolean)) mods.push(mk('skill_dmg', v, true, lineCond, { skill: sk }, src, raw))
