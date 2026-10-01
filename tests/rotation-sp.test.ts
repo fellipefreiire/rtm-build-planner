@@ -119,3 +119,13 @@ describe('skill level per skill (Skills palette)', () => {
     } finally { delete g.localStorage }
   })
 })
+
+describe('Darkside Shadow server bug (2026-10-01)', () => {
+  it('does not change Scythe Reap nor Reaping Slash, still raises Roaring', () => {
+    const go = (darkside: boolean) => runRotation({ build: set(), byId, steps: [SR, RS, RO], skills: skillMap, rules: rulesFor('Revenant'), toggles: { darkside }, food: null, mob: mobBy('Average Dummy'), k: null })
+    const on = go(true).events, off = go(false).events
+    expect(on[0].damage).toBe(off[0].damage)
+    expect(on[1].damage).toBe(off[1].damage)
+    expect(on[2].damage).toBeGreaterThan(off[2].damage)
+  })
+})

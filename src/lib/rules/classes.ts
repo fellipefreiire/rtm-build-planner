@@ -70,6 +70,9 @@ const GENERIC = (name: string): ClassRules => ({
   innate: null,
 })
 
+/** Skills Darkside Shadow currently skips on RTM (server bug, 2026-10-01). */
+const DARKSIDE_BUGGED = new Set(['trickster/scythe-reap', 'revenant/reaping-slash'])
+
 const REVENANT: ClassRules = {
   name: 'Revenant',
   calibrated: true,
@@ -93,7 +96,9 @@ const REVENANT: ClassRules = {
   skillPctExtra: ({ stats, toggles, skillKey, skillLv }) => {
     const out: Extra[] = []
     // Roaring's +2% per LUK comes from the dump since 2026-09-28 (it used to be patched here)
-    if (toggles.darkside) {
+    // Server bug [player report 2026-10-01]: Darkside does not apply to Scythe Reap nor Reaping Slash.
+    // Remove the skills from this list when RTM fixes it.
+    if (toggles.darkside && !DARKSIDE_BUGGED.has(skillKey ?? '')) {
       out.push({ label: 'Darkside Shadow', value: 2 * stats.dex, prov: 'reported', why: '+2% per DEX on physical skills' })
     }
     if (toggles.comboReady === false && skillKey === 'revenant/roaring-overslash') {
