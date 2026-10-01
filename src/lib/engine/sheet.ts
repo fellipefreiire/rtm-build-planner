@@ -335,30 +335,36 @@ export function computeSheet(
   })()
   const armorElement = pickEl(['armor', 'offhand'], 'armorEl', build.armorElement)
 
-  // ---- stats: base + gear ----
+  // ---- pass 2: what depends on stats ----
   const statsBase = { ...build.stats }
+  const applyPending = ({ m, refine, itemName }: (typeof pending)[number], st: Record<StatKey, number>) => {
+    if (m.cond.t === 'per_stat' && m.cond.members) {
+      // set bonus "Max HP +20 per base INT": once per set, and only with every piece
+      const k = `${m.cond.set}|perstat|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
+      if (seenSetBonus.has(k)) return
+      seenSetBonus.add(k)
+      const missing = m.cond.members.filter((n) => !wearing.has(n))
+      if (missing.length) {
+        skipped.push({ raw: m.raw, itemName, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
+        return
+      }
+    }
+    const mult = condMultiplier(m, refine, build.baseLv, st)
+    if (mult) addMod(totals, m, mult)
+  }
+  // "per base STAT" only reads the allocated stats, so it resolves BEFORE the totals: a stat it grants
+  // (Unknown Tech: LUK +1 per 5 base DEX) has to reach the stat window and everything derived from it
+  const byBase = (x: (typeof pending)[number]) => x.m.cond.t === 'per_stat' && !!x.m.cond.base
+  for (const x of pending) if (byBase(x)) applyPending(x, statsBase)
+
+  // ---- stats: base + gear ----
   const all = totals.flat.all_stats ?? 0
   // the game does not let a total stat go negative: AGI 1 with −2 from gear becomes 0 (window shows "1 −1") [measured in-game 2026-09-28]
   const stats = Object.fromEntries(
     STATS.map((s) => [s, Math.max(0, statsBase[s] + all + (totals.flat[s] ?? 0))]),
   ) as Record<StatKey, number>
 
-  // ---- pass 2: what depends on stats ----
-  for (const { m, refine, itemName } of pending) {
-    if (m.cond.t === 'per_stat' && m.cond.members) {
-      // set bonus "Max HP +20 per base INT": once per set, and only with every piece
-      const k = `${m.cond.set}|perstat|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
-      if (seenSetBonus.has(k)) continue
-      seenSetBonus.add(k)
-      const missing = m.cond.members.filter((n) => !wearing.has(n))
-      if (missing.length) {
-        skipped.push({ raw: m.raw, itemName, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
-        continue
-      }
-    }
-    const mult = condMultiplier(m, refine, build.baseLv, m.cond.t === 'per_stat' && m.cond.base ? statsBase : stats)
-    if (mult) addMod(totals, m, mult)
-  }
+  for (const x of pending) if (!byBase(x)) applyPending(x, stats)
 
   // manual additions: whatever the parser did not understand, the user credits here.
   // They go into the flat bucket; the derived values below add flat + pct, so this works

@@ -199,7 +199,10 @@ function main() {
   const setMembers = {}
   for (const it of out) {
     for (const m of it.mods) {
-      if (m.cond.t === 'set_bonus') (setMembers[m.cond.set] ??= new Set()).add(it.name)
+      // any line inside a set block names the set: a set whose bonuses are all "per stat" or "per total set
+      // refine" (Unknown Tech) has no plain set_bonus line, and its pieces went unregistered
+      const set = m.cond.t === 'set_bonus' ? m.cond.set : 'set' in m.cond ? m.cond.set : undefined
+      if (set) (setMembers[set] ??= new Set()).add(it.name)
     }
   }
   // a set declared by a single item ("Full Shadow Card Set" on Rank S Shadow Card) has pieces the dump does not

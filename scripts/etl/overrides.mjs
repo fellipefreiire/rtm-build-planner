@@ -55,6 +55,22 @@ export const ITEM_OVERRIDES = {
     desc: [['Raises your MaxHP limit\nby 10,000', 'MaxHP Limit +10000']],
     why: 'same MaxHP ceiling as Valhalla Knight Card, split across two lines with a comma [db]',
   },
+  'Unknown Tech Armor': {
+    desc: [['Critical +1, +1 per 5 base\nDEX.', 'Critical +1\nCritical +1 per 5 base DEX']],
+    why: 'piece bonus "Critical +1, +1 per 5 base DEX." wraps mid-sentence; the second part repeats the stat [db]',
+  },
+  'Unknown Tech Boots': {
+    desc: [['Move Speed +1%, +1% per\n10 base DEX.', 'Move Speed +1%\nMove Speed +1% per 10 base DEX']],
+    why: 'piece bonus "Move Speed +1%, +1% per 10 base DEX." wraps mid-sentence [db]',
+  },
+  'Unknown Tech Pendant': {
+    desc: [['Perfect Dodge +1, +1 per 10\nbase DEX.', 'Perfect Dodge +1\nPerfect Dodge +1 per 10 base DEX']],
+    why: 'piece bonus "Perfect Dodge +1, +1 per 10 base DEX." wraps mid-sentence [db]',
+  },
+  'Unknown Tech Shield': {
+    desc: [['Critical Damage +1%,\n+1% per 10 base DEX.', 'Critical Damage +1%\nCritical Damage +1% per 10 base DEX']],
+    why: 'piece bonus "Critical Damage +1%, +1% per 10 base DEX." wraps mid-sentence [db]',
+  },
   'Mind Vessel Card': {
     desc: [['SP Regen 10%+1% per 2 base LUK', 'SP Regen +10%\nSP Regen +1% per 2 base LUK']],
     why: '"10%+1% per 2 base LUK" on one line does not match the parser; split into the flat part and the per-base-LUK part [db]',
