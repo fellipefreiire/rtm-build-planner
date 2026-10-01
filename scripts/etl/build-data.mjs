@@ -84,7 +84,29 @@ function elementsOf(desc, slots) {
     if (slots.includes('weapon')) endow = e
     else armorEl = e
   }
+  // "Dark Weapon" alone on a line, on a weapon (Dark Beak, Demon Claws): the emulator has only bAtkEle
+  const w = lines.find((x) => /^(\w+) weapon\.?$/i.test(x))
+  if (w && !endow && slots.includes('weapon')) endow = elem(/^(\w+)/.exec(w)[1])
   return { endow, armorEl }
+}
+
+/**
+ * "Dark Weapon\n+10% Damage vs Fire/Water/Earth/Wind/Holy\n-10% Damage vs Dark": the lines after
+ * "<Element> Weapon" describe what the element table already does — in the emulator these items
+ * only have `bAtkEle` (Dark Beak, Demon Claws, Scorpion Spear, Zephyrus). Removed before parsing so
+ * they do not count twice. The element itself is read by elementsOf.
+ */
+function weaponElementBlock(desc) {
+  const lines = String(desc || '').split('\n')
+  const out = []
+  for (let i = 0; i < lines.length; i++) {
+    out.push(lines[i])
+    if (!/^(neutral|water|earth|fire|wind|poison|holy|dark|ghost|undead) weapon\.?$/i.test(lines[i].trim())) continue
+    out.pop()
+    // Zephyrus wraps it: "+15%" on one line, "Damage vs Water" on the next
+    while (i + 1 < lines.length && /^(?:[+-]\d+%(?: damage vs .+)?|damage vs .+)$/i.test(lines[i + 1].trim())) i++
+  }
+  return out.join('\n')
 }
 
 /**
@@ -121,7 +143,7 @@ function main() {
     let desc = String(it.desc || '')
     for (const [from, to] of ov.desc ?? []) desc = desc.replace(from, to)
     desc = runeExtra(desc)
-    const { mods, unparsed, lines, numeric } = parseDesc(desc, it.id)
+    const { mods, unparsed, lines, numeric } = parseDesc(weaponElementBlock(desc), it.id)
     const unknown = unparsed.filter((u) => u.reason === 'chave_desconhecida' || u.reason === 'forma_desconhecida').length
     const conditional = unparsed.filter((u) => u.reason === 'condicional').length
     const notModeled = unparsed.filter((u) => u.reason === 'nao_modelado').length
@@ -265,7 +287,9 @@ function main() {
       classNote: type === 'Class note',
       sp: s.sp ?? null,
       needs: (s.needs || []).map(([n, lv]) => ({ name: n, lv })),
-      prose: (s.prose || s.desc || '').trim(),
+      // full in-game text: `prose` in the dump is only the opening, the numbers ("Weapon Bonus is 2 ATK
+      // per level") are in a separate column; `desc` has both [in-game tooltip 2026-10-01]
+      prose: (s.desc || s.prose || '').trim(),
       /** range in cells per level; range >= 4 makes a skill a ranged attack (battle.cpp battle_range_type) */
       range: Array.isArray(s.range) ? s.range : s.range != null ? [s.range] : null,
       damage: f,

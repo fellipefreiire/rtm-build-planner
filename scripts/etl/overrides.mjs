@@ -18,10 +18,9 @@ export const ITEM_OVERRIDES = {
   'Sarah Irine Card': {
     desc: [
       ['Weapon Attack Power +3%', 'ATK +3%'],
-      ['+10% Damage vs Neutral/Poison/Ghost/Undead/Dark\n-10% Damage vs Holy',
-        ['Neutral', 'Poison', 'Ghost', 'Undead', 'Dark'].map((e) => `Damage against ${e} element +10%`).join('\n') + '\nDamage against Holy element -10%'],
     ],
-    why: 'the parser cannot read "vs Neutral/Poison/..." on one line; split per element. "Weapon Attack Power" treated as ATK% (approximation) [db]',
+    // 2026-10-01: the "Holy Weapon / +10% vs ..." block describes the element table, it is not a bonus (see weaponElementBlock)
+    why: '"Weapon Attack Power" treated as ATK% (approximation) [db]',
   },
   'Heir to the King Boots': {
     desc: [['Physical and magical DMG\nvs all sizes +1% per refine', 'Damage +1% per refine']],
@@ -89,6 +88,11 @@ export const SKILL_OVERRIDES = {
   'revenant/phantom-slice': {
     desc: [['Damage is 100+20% +2% per Vit.', 'Damage is 200+20% per level +2% per Vit.']],
     why: 'in-game tooltip says "Damage is 200+20% +2% per Vit." (dump says 100); the emulator has 200 + 20×lv + 2×VIT (battle.cpp:4541) [in-game 2026-10-01]',
+  },
+  'trickster/dark-messenger': {
+    // hits = skill level and ×1.5 in Combo Ready are applied by the rotation (rules/rotation/revenant.ts)
+    desc: [['Damage is 25+1% per STR, per hit', 'Damage is 25+0% per level +1% per STR, per hit']],
+    why: '"Damage is 25+1% per STR, per hit" has no "per level", so the parser skipped it and the skill never showed up as a damage skill [db]',
   },
   'revenant/haunting-slice': {
     // no damage number anywhere: a 0% formula carries the cooldown; the rotation marks it "no formula"

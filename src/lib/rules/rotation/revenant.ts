@@ -5,8 +5,11 @@ import { learned, RotationRules } from './types'
 export const REVENANT_SKILLS = [
   'trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/roaring-overslash', 'trickster/sweeping-slash',
   'trickster/hellraiser', 'revenant/underworld-rainstorm', 'trickster/dark-message', 'revenant/flaming-wave',
-  'revenant/phantom-slice', 'revenant/haunting-slice',
+  'revenant/phantom-slice', 'revenant/haunting-slice', 'trickster/dark-messenger',
 ] as const
+
+/** The Trickster part: same rules, without the skills that only come with Revenant. */
+export const TRICKSTER_SKILLS = REVENANT_SKILLS.filter((k) => k.startsWith('trickster/'))
 
 const SCYTHE_REAP = 'trickster/scythe-reap'
 const REAPING = 'revenant/reaping-slash'
@@ -16,6 +19,7 @@ const HELLRAISER = 'trickster/hellraiser'
 const UNDERWORLD = 'revenant/underworld-rainstorm'
 const DARK_MESSAGE = 'trickster/dark-message'
 const HAUNTING = 'revenant/haunting-slice'
+const DARK_MESSENGER = 'trickster/dark-messenger'
 
 const MAX_STACKS = 5
 const STACK_TIME = 6
@@ -84,6 +88,10 @@ export const REVENANT_ROTATION: RotationRules<State> = {
       mult = 0
       notes.push('no damage formula ("fixed based on ATK and Str"): counted as 0')
       if (c.lv < 5) notes.push(`${20 * c.lv}% chance to autocast Scythe Reap: not counted (only Lv5 is a sure proc)`)
+    } else if (c.key === DARK_MESSENGER) {
+      // "Each level increases hit amount, up to 10. Each hit deals full damage. Deals 1.5x damage when combo ready" [db]
+      hits = c.lv
+      if (cr) mult = 1.5
     } else if (c.key === UNDERWORLD) {
       hits = 15
       mult = 1 + 0.04 * before
@@ -112,4 +120,11 @@ export const REVENANT_ROTATION: RotationRules<State> = {
     if (giveCr) c.grant('comboReady', giveCr)
     if (c.key === HELLRAISER) c.grant('finisherReady', 5)
   },
+}
+
+/** Trickster: Combo Ready (Scythe Reap, Dark Message) and Finisher Ready (Hellraiser); Overslash stacks only come with Reaping Slash. */
+export const TRICKSTER_ROTATION: RotationRules<State> = {
+  ...REVENANT_ROTATION,
+  palette: (build) => learned(build, TRICKSTER_SKILLS),
+  lanes: REVENANT_ROTATION.lanes.filter((l) => l.id !== 'stacks'),
 }

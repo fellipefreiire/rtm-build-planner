@@ -1,5 +1,5 @@
 // Rules that appear in no dump text — written by hand, one per class.
-// Only Revenant is calibrated.
+// Only Revenant is calibrated. Trickster reuses the Revenant pieces that come from Trickster skills.
 import { Prov, StatKey } from '@/lib/types'
 
 export type Extra = { label: string; value: number; prov: Prov; why: string }
@@ -70,6 +70,39 @@ const GENERIC = (name: string): ClassRules => ({
   innate: null,
 })
 
+/** Scythe Mastery (Trickster skill, so Revenant inherits it): ATK and crit with a scythe, PD with or without. */
+const scytheMastery = (c: PassiveCtx) => {
+  const sm = 'trickster/scythe-mastery'
+  // Scythe Mastery's PD applies without a scythe: naked on 2026-09-27 the PD was formula + 5 from pet + 10
+  const pd = perLv(c, sm, 1, 'Scythe Mastery', '1 Perfect Dodge per level, with or without a scythe')
+  const scythe = c.weaponType === 'Mace'   // Scythe in the emulator
+  return {
+    pd,
+    atk: scythe ? perLv(c, sm, 2, 'Scythe Mastery', '2 ATK per level') : [],
+    crit: scythe ? perLv(c, sm, 1, 'Scythe Mastery', '1 crit per level') : [],
+  }
+}
+
+/** Trickster buffs, shared by Revenant. */
+const TRICKSTER_BUFFS: Toggle[] = [
+  { id: 'trueSight', skill: 'trickster/true-sight', label: 'True Sight', default: false, why: 'All Stats +3; Hit and Crit +3 per level (crit before the ×1.15 from Baphomet Jr.). 60 s / CD 80 s = 75%. [db]' },
+  { id: 'burningScythe', skill: 'trickster/burning-scythe', label: 'Burning Scythe', default: false, why: 'Fire endow on the weapon, only when no item already grants an element.' },
+]
+
+/** "Increases all stats by 3 for duration. Increases hit by 3 and crit by 3 per level." [db] */
+const trueSightMods = (t: Record<string, boolean>, skills?: Record<string, number>): BuffMod[] => {
+  if (!t.trueSight) return []
+  const lv = skills?.['trickster/true-sight'] ?? 10
+  return [
+    { key: 'all_stats', value: 3, pct: false, label: 'True Sight' },
+    { key: 'crit_rate', value: 3 * lv, pct: false, label: 'True Sight' },
+    { key: 'hit', value: 3 * lv, pct: false, label: 'True Sight' },
+  ]
+}
+
+/** HP ×1.10 and HIT +25 with nothing equipped: same on Revenant and Dark Knight. */
+const INNATE = { hpRate: 10, hit: 25, pd: 0 }
+
 /** Skills Darkside Shadow currently skips on RTM (server bug, 2026-10-01). */
 const DARKSIDE_BUGGED = new Set(['trickster/scythe-reap', 'revenant/reaping-slash'])
 
@@ -81,16 +114,12 @@ const REVENANT: ClassRules = {
   simBuffs: [
     { id: 'darkside', skill: 'revenant/darkside-shadow', label: 'Darkside Shadow', default: true, why: '+2% per DEX on physical skill %. Lv10, permanent uptime. [db]' },
     { id: 'comboReady', skill: 'revenant/reaping-slash', label: 'Combo Ready', default: true, why: 'Without it Roaring loses 13%/level (battle.cpp:4743). [emu]' },
-    { id: 'trueSight', skill: 'trickster/true-sight', label: 'True Sight', default: false, why: 'Crit +30 (before the ×1.15 from Baphomet Jr.), All Stats +3, Hit +30. 60 s / CD 80 s = 75%. [base]' },
+    TRICKSTER_BUFFS[0],
     { id: 'vampireMark', skill: 'revenant/vampire-mark', label: 'Vampire Mark', default: false, why: 'Leech Power +15, which does NOT count toward the shield [player report 2026-09-28]. 40 s / CD 60 s.' },
-    { id: 'burningScythe', skill: 'trickster/burning-scythe', label: 'Burning Scythe', default: false, why: 'Fire endow on the weapon, only when no item already grants an element.' },
+    TRICKSTER_BUFFS[1],
   ],
-  buffMods: (t) => [
-    ...(t.trueSight ? [
-      { key: 'all_stats', value: 3, pct: false, label: 'True Sight' },
-      { key: 'crit_rate', value: 30, pct: false, label: 'True Sight' },
-      { key: 'hit', value: 30, pct: false, label: 'True Sight' },
-    ] : []),
+  buffMods: (t, c) => [
+    ...trueSightMods(t, c?.skills),
     ...(t.vampireMark ? [{ key: 'leech_power_buff', value: 15, pct: true, label: 'Vampire Mark' }] : []),
   ],
   skillPctExtra: ({ stats, toggles, skillKey, skillLv }) => {
@@ -110,28 +139,18 @@ const REVENANT: ClassRules = {
   // reading of 2026-09-26 matches: FLEE 274 = base formula + 20 from Advanced Scythe Mastery Lv10.
   passives: (c) => {
     const adv = 'revenant/advanced-scythe-mastery'
-    const sm = 'trickster/scythe-mastery'
-    // Scythe Mastery's PD applies without a scythe: naked on 2026-09-27 the PD was formula + 5 from pet + 10
-    const pd = perLv(c, sm, 1, 'Scythe Mastery', '1 Perfect Dodge per level, with or without a scythe')
-    if (c.weaponType !== 'Mace') return { pd }   // Scythe in the emulator
+    const sm = scytheMastery(c)
+    if (c.weaponType !== 'Mace') return { pd: sm.pd }   // Scythe in the emulator
     return {
-      atk: [
-        ...perLv(c, adv, 5, 'Advanced Scythe Mastery', '5 ATK per level'),
-        ...perLv(c, sm, 2, 'Scythe Mastery', '2 ATK per level'),
-      ],
-      crit: [
-        ...perLv(c, adv, 1, 'Advanced Scythe Mastery', '1 crit per level'),
-        ...perLv(c, sm, 1, 'Scythe Mastery', '1 crit per level'),
-      ],
+      atk: [...perLv(c, adv, 5, 'Advanced Scythe Mastery', '5 ATK per level'), ...sm.atk],
+      crit: [...perLv(c, adv, 1, 'Advanced Scythe Mastery', '1 crit per level'), ...sm.crit],
       flee: perLv(c, adv, 2, 'Advanced Scythe Mastery', '2 FLEE per level'),
-      pd,
+      pd: sm.pd,
     }
   },
   // No items and no skills allocated in the planner: comes from the naked reading.
   innate: {
-    hpRate: 10,
-    hit: 25,
-    pd: 0,
+    ...INNATE,
     why: 'measured naked: HP = formula × 1.10 and HIT = formula + 25 (2026-09-27 and 2026-09-28, the latter with skills reset). '
       + 'The "PD +15" of 2026-09-27 was Reaper Shell 5 + Scythe Mastery 10: on 2026-09-28, with no skills, PD was 6 = 1 + 5 from pet',
   },
@@ -149,6 +168,19 @@ const REVENANT: ClassRules = {
       why: `MaxHP + ${lv * 10}% × (STR ${stats.str} + 2×LUK ${stats.luk} + BaseLv ${baseLv} = ${sum}) × LP ${leechPower} [tooltip 2026-09-21]`,
     }
   },
+}
+
+// Trickster: not calibrated. Same pieces as Revenant minus what comes from Revenant skills
+// (Darkside, Advanced Scythe Mastery, Vampire Mark, Ominous Presence shield).
+const TRICKSTER: ClassRules = {
+  ...GENERIC('Trickster'),
+  simBuffs: TRICKSTER_BUFFS,
+  buffMods: (t, c) => trueSightMods(t, c?.skills),
+  passives: (c) => {
+    const sm = scytheMastery(c)
+    return c.weaponType === 'Mace' ? sm : { pd: sm.pd }
+  },
+  innate: { ...INNATE, why: '[estimated] same as Revenant and Dark Knight (HP = formula × 1.10, HIT = formula + 25); confirm naked on the Trickster' },
 }
 
 // Dark Knight: not calibrated. The buffs come from the skill texts; the rotation rules
@@ -180,7 +212,7 @@ const DARK_KNIGHT: ClassRules = {
   },
 }
 
-const TABLE: Record<string, ClassRules> = { Revenant: REVENANT, 'Dark Knight': DARK_KNIGHT }
+const TABLE: Record<string, ClassRules> = { Revenant: REVENANT, Trickster: TRICKSTER, 'Dark Knight': DARK_KNIGHT }
 
 export const rulesFor = (cls: string): ClassRules => TABLE[cls] ?? GENERIC(cls)
 

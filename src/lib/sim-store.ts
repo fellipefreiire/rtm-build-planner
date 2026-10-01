@@ -31,7 +31,10 @@ export const defaultSim = (buffDefaults: Record<string, boolean>): SimState => (
   mobName: 'Average Dummy',
   buffs: buffDefaults,
   food: { stat: 'luk', value: 0 },
-  rotations: { Revenant: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'] },
+  rotations: {
+    Revenant: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'],
+    Trickster: ['trickster/scythe-reap', 'trickster/sweeping-slash', 'trickster/hellraiser', 'trickster/sweeping-slash'],
+  },
   hpPct: 100,
   lanesShown: { hp: true, sp: true, shield: true },
   skillLv: {},
@@ -61,7 +64,8 @@ export function loadSim(buffDefaults: Record<string, boolean>): SimState {
   const s = read(K_SIM) as Partial<SimState> | null
   if (!s || typeof s !== 'object') return d
   // before 2026-09-30 there was a single rotation, always Revenant's
-  const rotations = s.rotations ?? (Array.isArray(s.rotation) ? { Revenant: s.rotation } : d.rotations)
+  // classes with no saved rotation get the default one (Trickster, added 2026-10-01)
+  const rotations = { ...d.rotations, ...(s.rotations ?? (Array.isArray(s.rotation) ? { Revenant: s.rotation } : {})) }
   // 2026-10-01: the per-step level ("key@lv") became one level per skill; the last step's level wins
   const skillLv: Record<string, Record<string, number>> = { ...(s.skillLv ?? {}) }
   for (const [cls, steps] of Object.entries(rotations)) {
