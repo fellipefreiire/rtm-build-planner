@@ -60,11 +60,13 @@ export function spRegen(sheet: StatSheet, isrLv: number) {
   const regenPct = (sheet.totals.pct.sp_regen ?? 0) + (sheet.totals.flat.sp_regen ?? 0)
   const natural = Math.floor((1 + Math.floor(sheet.stats.int / 6) + Math.floor(maxSp / 100)) * Math.max(0, 1 + regenPct / 100))
   const isr = isrLv > 0 ? Math.floor((Math.min(isrLv, 10) / 10) * (20 + maxSp / 100)) : 0
-  return { maxSp, natural, isr, perSec: natural / SP_TICK + isr / ISR_TICK }
+  // gear "Regen 1 SP per refine every second" / "Regenerates 5 SP per second": its own 1 s tick [db]
+  const flatSec = (sheet.totals.flat.sp_per_sec ?? 0) + (sheet.totals.pct.sp_per_sec ?? 0)
+  return { maxSp, natural, isr, flatSec, perSec: natural / SP_TICK + isr / ISR_TICK + flatSec }
 }
 
 export function runFight(i: FightInput): FightResult {
-  const { maxSp, natural, isr, perSec } = spRegen(i.sheet, i.isrLv)
+  const { maxSp, natural, isr, flatSec, perSec } = spRegen(i.sheet, i.isrLv)
   const spRegenPerMin = perSec * 60
 
   let sp = maxSp
@@ -75,12 +77,14 @@ export function runFight(i: FightInput): FightResult {
   let spOutAt: number | null = null
   let nextNat = SP_TICK
   let nextIsr = ISR_TICK
+  let nextSec1 = 1
   const series: number[] = []
   let nextSec = 1
 
   while (t <= i.duration + 1e-9) {
     while (t >= nextNat - 1e-9) { sp = Math.min(maxSp, sp + natural); nextNat += SP_TICK }
     while (isr && t >= nextIsr - 1e-9) { sp = Math.min(maxSp, sp + isr); nextIsr += ISR_TICK }
+    while (flatSec && t >= nextSec1 - 1e-9) { sp = Math.max(0, Math.min(maxSp, sp + flatSec)); nextSec1 += 1 }
     if (t >= ready) {
       const cost = spCost(i.sheet, i.skill, i.skillLv, sp).total
       if (sp >= cost) {

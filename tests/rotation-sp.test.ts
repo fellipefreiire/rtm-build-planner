@@ -129,3 +129,13 @@ describe('Darkside Shadow server bug (2026-10-01)', () => {
     expect(on[2].damage).toBeGreaterThan(off[2].damage)
   })
 })
+
+describe('gear SP every second', () => {
+  it('Crown of the Divine +9 ("Regen 1 SP per refine every second") adds 9 SP/s to the regen', () => {
+    const b = set()
+    const plain = run([SR], b).sp.perSec
+    b.slots.upper = { id: find('Crown of the Divine').id, refine: 9, cards: [] }
+    const crown = run([SR], b)
+    expect(crown.sp.perSec - plain).toBeGreaterThan(8.5)
+  })
+})

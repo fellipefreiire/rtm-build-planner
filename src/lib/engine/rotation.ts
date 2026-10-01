@@ -114,32 +114,36 @@ export function runRotation(i: RotationInput): RotationResult {
   const base = computeSheet({ ...build, skillKey: null, anchor: null }, i.byId, null, rules, i.toggles, i.food)
   // ---- SP: RTM regen ticks (natural every 1.2 s, Increase SP Recovery every 4.5 s) ----
   const isrLv = build.skills['trickster/increase-sp-recovery'] ?? 0
-  const { maxSp, natural: spNat, isr: spIsr, perSec: spPerSec } = spRegen(base, isrLv)
+  const { maxSp, natural: spNat, isr: spIsr, flatSec: spSec, perSec: spPerSec } = spRegen(base, isrLv)
   let sp = maxSp
   let nextNat = SP_TICK
   let nextIsr = ISR_TICK
+  let nextS1 = spSec ? 1 : Infinity
   const spSeries: SpPoint[] = [{ t: 0, v: sp }]
   const spPush = (t: number) => { spSeries.push({ t, v: sp }) }
   // applies every regen tick up to `at`
   const spTo = (at: number) => {
     for (;;) {
-      const next = Math.min(nextNat, spIsr > 0 ? nextIsr : Infinity)
+      const next = Math.min(nextNat, spIsr > 0 ? nextIsr : Infinity, nextS1)
       if (next > at + 1e-9) break
       spPush(next)
       if (next === nextNat) { sp = Math.min(maxSp, sp + spNat); nextNat += SP_TICK }
-      else { sp = Math.min(maxSp, sp + spIsr); nextIsr += ISR_TICK }
+      else if (next === nextIsr) { sp = Math.min(maxSp, sp + spIsr); nextIsr += ISR_TICK }
+      else { sp = Math.max(0, Math.min(maxSp, sp + spSec)); nextS1 += 1 }
       spPush(next)
     }
   }
   // time of the next regen tick (to wait for SP)
-  const nextTick = () => Math.min(nextNat, spIsr > 0 ? nextIsr : Infinity)
+  const nextTick = () => Math.min(nextNat, spIsr > 0 ? nextIsr : Infinity, spSec > 0 ? nextS1 : Infinity)
 
   // ---- HP: costs, leech and natural regen; Harvest reads it ----
   const maxHp = base.maxHp?.v ?? 0
   let hp = maxHp * Math.min(100, Math.max(1, i.hpPct ?? 100)) / 100
   // natural regen [emu]: every 2 s, (1 + VIT/5 + MaxHP/200) × HP Regen% (status.cpp:5416, player.conf natural_healhp_interval)
   const hpRegenPct = (base.totals.pct.hp_regen ?? 0) + (base.totals.flat.hp_regen ?? 0)
+  // plus gear "Lose 5 HP per refine every second" / "+N HP every second" [db]
   const regenPerSec = (1 + Math.floor(base.stats.vit / 5) + Math.floor(maxHp / 200)) * Math.max(0, 1 + hpRegenPct / 100) / 2
+    + (base.totals.flat.hp_per_sec ?? 0)
   // leech: heal = damage × Leech Power, on a Leech Rate chance (expected value; rate above 100% changes nothing)
   const leechPower = base.leechPower.v
   const leechRate = (base.totals.pct.leech_rate ?? 0) + (base.totals.flat.leech_rate ?? 0)
@@ -149,7 +153,7 @@ export function runRotation(i: RotationInput): RotationResult {
   let hpT = 0
   const regenTo = (at: number) => {
     if (at > hpT) {
-      hp = Math.min(maxHp, hp + (at - hpT) * regenPerSec)
+      hp = Math.max(1, Math.min(maxHp, hp + (at - hpT) * regenPerSec))
       series.push({ t: at, pct: pctOf(hp) })
       hpT = at
     }

@@ -93,6 +93,8 @@ export type UnparsedEffect = {
   itemId: number; line: number; raw: string
   /** stable keys: no number / unknown key / unknown shape / conditional */
   reason: 'sem_numero' | 'chave_desconhecida' | 'forma_desconhecida' | 'condicional'
+    /** understood, but outside the planner: zeny, drops, Kafra, rental, revival… [2026-10-01] */
+    | 'nao_modelado'
 }
 
 export type Item = {

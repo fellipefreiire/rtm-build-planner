@@ -108,7 +108,7 @@ function main() {
   const mobSrc = dump.load('raw-db-mobs.json')
 
   // ---------- items ----------
-  const cov = { lines: 0, numeric: 0, applied: 0, conditional: 0, unknown: 0, byReason: {}, byGroup: {} }
+  const cov = { lines: 0, numeric: 0, applied: 0, conditional: 0, notModeled: 0, unknown: 0, byReason: {}, byGroup: {} }
   const corrections = []
   const out = []
   for (const it of items) {
@@ -124,9 +124,11 @@ function main() {
     const { mods, unparsed, lines, numeric } = parseDesc(desc, it.id)
     const unknown = unparsed.filter((u) => u.reason === 'chave_desconhecida' || u.reason === 'forma_desconhecida').length
     const conditional = unparsed.filter((u) => u.reason === 'condicional').length
+    const notModeled = unparsed.filter((u) => u.reason === 'nao_modelado').length
     cov.lines += lines; cov.numeric += numeric
     cov.unknown += unknown; cov.conditional += conditional
-    cov.applied += numeric - unknown - conditional
+    cov.notModeled += notModeled
+    cov.applied += numeric - unknown - conditional - notModeled
     for (const u of unparsed) cov.byReason[u.reason] = (cov.byReason[u.reason] || 0) + 1
     const g = cov.byGroup[it.grp] ??= { numeric: 0, unknown: 0 }
     g.numeric += numeric; g.unknown += unknown
@@ -313,13 +315,14 @@ function main() {
   cov.pct = {
     applied: +(cov.applied / cov.numeric * 100).toFixed(1),
     conditional: +(cov.conditional / cov.numeric * 100).toFixed(1),
+    notModeled: +(cov.notModeled / cov.numeric * 100).toFixed(1),
     unknown: +(cov.unknown / cov.numeric * 100).toFixed(1),
   }
   report.push(w('coverage.json', cov))
 
   console.log(report.join('\n'))
   console.log(`\nitems: ${out.length}  mobs: ${mobsOut.length}  skills: ${skillsOut.length} (${skillsOut.filter((s) => s.damage).length} with a damage formula)  classes: ${classes.length}`)
-  console.log(`coverage (lines with a number): applied ${cov.pct.applied}% · conditional ${cov.pct.conditional}% · not understood ${cov.pct.unknown}%`)
+  console.log(`coverage (lines with a number): applied ${cov.pct.applied}% · conditional ${cov.pct.conditional}% · not modeled ${cov.pct.notModeled}% · not understood ${cov.pct.unknown}%`)
   if (corrections.length) console.log(`\nmanual corrections applied:\n  ${corrections.join('\n  ')}`)
 }
 

@@ -435,6 +435,10 @@ export function computeSheet(
   // (base_stat_bonus, without the variance, which is symmetric); mastery adds without element
   const weaponPart = weaponAtk * (1 + stats.str / 200) + refineAtk
   const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk') + atkFromDef) * (1 + pct('atk') / 100)
+  // Heir to the King: "Adds DEF equal to 10% of your total ATK" — total read as the status window's
+  // left + right ATK (and MATK) [estimated: the text does not say which total]
+  const defFromAtk = Math.floor((sAtk + shownGear) * (pct('def_from_atk') + flat('def_from_atk')) / 100)
+  const mdefFromMatk = Math.floor((sMatk + weaponMatk + refineAtk + flat('matk') + matkFromMdef) * (pct('mdef_from_matk') + flat('mdef_from_matk')) / 100)
   const inn = rules.innate
   const bHitT = bHit + pSum('hit') + (inn?.hit ?? 0)
   const bFleeT = bFlee + pSum('flee')
@@ -505,8 +509,8 @@ export function computeSheet(
     equipped,
     atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', `${pct('atk')}%`),
     matk: qty((sMatk + weaponMatk + refineAtk + flat('matk') + matkFromMdef) * (1 + pct('matk') / 100), 'emu', `status MATK ${sMatk}`, `weapon ${weaponMatk} + refine ${refineAtk}`, `gear ${flat('matk')}`, matkFromMdef ? `${matkFromMdef} from MDEF` : '', `${pct('matk')}%`),
-    def: qty(defTotal, 'derived', 'gear DEF + mods'),
-    mdef: qty(mdefTotal, 'derived', 'gear MDEF + mods'),
+    def: qty(defTotal + defFromAtk, 'derived', 'gear DEF + mods', defFromAtk ? `${defFromAtk} from ATK (Heir to the King)` : ''),
+    mdef: qty(mdefTotal + mdefFromMatk, 'derived', 'gear MDEF + mods', mdefFromMatk ? `${mdefFromMatk} from MATK (Heir to the King)` : ''),
     maxHp: hp ? qty(hp.v, 'emu', hp.why) : null,
     maxSp: sp ? qty(sp.v, 'emu', sp.why) : null,
     critRate: qty(critTotal, 'emu', `base ${bCrit} (LUK) [emu]`, `gear ${gearCrit}`, critMult !== 100 ? `× ${critMult}% (Total Critical Rate)` : '', pWhy('crit')),

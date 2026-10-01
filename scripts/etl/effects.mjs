@@ -24,6 +24,8 @@ export const MOD_KEYS = new Set([
   // 2026-09-30: End of Kings ("Adds ATK equal to 10% of your total DEF", "Soft DEF +1%") and the
   // MaxHP ceiling that Valhalla Knight Card / Heimdall's Legacy raise
   'atk_from_def', 'matk_from_mdef', 'soft_def', 'hp_limit',
+  // 2026-10-01: Heir to the King ("Adds DEF equal to 10% of your total ATK"); flat SP/HP every second
+  'def_from_atk', 'mdef_from_matk', 'sp_per_sec', 'hp_per_sec',
 ])
 
 const STATS = ['str', 'agi', 'vit', 'int', 'dex', 'luk']
@@ -92,10 +94,27 @@ const ALIAS = new Map(Object.entries({
   'final damage received': ['dmg_taken'], 'final damage taken': ['dmg_taken'],
   'atk from def': ['atk_from_def'], 'matk from mdef': ['matk_from_mdef'], 'soft def': ['soft_def'],
   'maxhp limit': ['hp_limit'], 'max hp limit': ['hp_limit'],
+  // 2026-10-01: forms seen in the unparsed report
+  range: ['attack_range'], 'atk and matk': ['atk', 'matk'], 'atk & matk': ['atk', 'matk'],
+  'sp recovery': ['sp_regen'], 'hp recovery': ['hp_regen'], 'hp/sp recovery': ['hp_regen', 'sp_regen'], 'melee attack': ['melee_dmg'], 'ranged attack': ['ranged_dmg'],
+  'long ranged attack': ['ranged_dmg'], 'long-range damage': ['ranged_dmg'],
+  'flat defense': ['def'], 'final damage': ['dmg_pct'], 'flat def': ['def'], 'total mdef': ['mdef'],
+  'max hp and sp': ['hp', 'sp'], 'max hp and max sp': ['hp', 'sp'], 'max hp/max sp': ['hp', 'sp'],
+  'final damage reduction': ['dmg_reduction'], 'physical reduction': ['resist_melee', 'resist_long'],
+  'long range damage taken': ['resist_long'], 'long range resistance': ['resist_long'],
+  'melee physical damage taken': ['resist_melee'], 'double attack chance': ['double_attack_rate'],
+  'weapon attack power': ['atk'], 'hit rate': ['hit'], 'natural hp regen': ['hp_regen'],
+  'hp recov rate': ['hp_regen'], 'sp recov rate': ['sp_regen'], 'hp recovery rate': ['hp_regen'], 'sp recovery rate': ['sp_regen'],
+  'healing power and healing received': ['healing_power', 'healing_received'], 'physical damage received': ['resist_melee', 'resist_long'],
+  'physical damage taken': ['resist_melee', 'resist_long'], 'perfect hit rate': ['perfect_hit'],
+  'healing done and received': ['healing_power', 'healing_received'], 'critical rate total': ['crit_rate_mult'],
   ...Object.fromEntries(STATS.map((s) => [s, [s]])),
 }))
 
 const RE = {
+  // 2026-10-01: economy, drops, consumables, movement tricks, revival, item rental… They have a number but
+  // no effect on damage or defense; kept apart from "not understood" so that list shows what is really broken
+  notModeled: /\b(added effect|knock\w*|zeny|drops\b|dropping|shadow ores?|jewel ores?|\bores?\b|kafra|elixir|refine material|rental|slides? you|cells backwards|resurrect\w*|revive\w*|warp\w*|teleport\w*|prevents downgrade|random (?:card|class gem)|class gem|loot|per kill|on kill|per hit|item healing|magic vs|vengeance rate)\b/i,
   marker: /^(piece bonus|requirement|innate|bonus|effects?)\s*:?\s*$/i,
   setBonus: /^(?<set>.*?)\s*set bonus\s*:?\s*$/i,
   // "Baphomet Set:" names the generic "Set Bonus:" on cards
@@ -114,26 +133,28 @@ const RE = {
   // "For each base stat over 98:" (Angel of Genesis, Demon of Apocalypse): × how many base stats pass
   perBaseStat: /^for\s+each\s+base\s+stat\s+(?:is\s+)?(?:over|above)\s+(?<n>\d+)\s*:\s*$/i,
   slotsMeta: /^\d+\s+slots?$/i,
-  extraCont: /^extra\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)(?<rest>.*)$/i,
+  extraCont: /^\+?\s*(?:an\s+)?(?<lead>extra|plus)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?:more\b)?(?<rest>.*)$/i,
   // continuation with no keyword: "+2% per Upgrade", "+10%", "5% Bonus Damage"
-  bareCont: /^(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?<rest>bonus damage|damage)?$/i,
+  bareCont: /^(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?:more\s*)?(?<rest>bonus damage|damage)?$/i,
   piecesMarker: /^(\d+)\s+pieces?\s*:/i,
   // "With two of these equipped:" (Valhalla Knight Card): needs N copies of this same item
   copiesMarker: /^with\s+(two|three|four|\d+)\s+of\s+these\s+equipped\s*:?\s*$/i,
   skillColonLv: /^(?<s>[A-Za-z][A-Za-z '-]*?)\s*:\s*lv\s*(?<n>\d+)$/i,
-  reflect: /^reflect\s+(?<n>\d+(?:[.,]\d+)?)%\s+melee\s+damage$/i,
+  // "Reflects 5% short range damage taken", "Reflects 3% damage taken from melee attackers", "Reflects 5% of melee damage"
+  reflect: /^reflects?\s+(?:all\s+)?(?<n>\d+(?:[.,]\d+)?)%\s+(?:of\s+)?(?:(?:melee|short[- ]range)\s+damage(?:\s+taken)?|damage\s+taken\s+from\s+melee\s+attackers)$/i,
   parenMeta: /^\(.*\)$/,
   // marker glued to the start of the line itself: "Set refine 9+: ASPD Limit +1"
-  inlineMarker: /^(?<mk>(?:set\s+)?refine\s+\+?\d+\+?|per\s+(?:\d+\s+)?(?:total\s+set\s+)?refines?|\d+\s+pieces?|set\s+bonus|piece\s+bonus|innate|bonus|base\s+level\s+\d+\+?)\s*:\s*(?<rest>.+)$/i,
+  inlineMarker: /^(?<mk>(?:set\s+)?refine\s+\+?\d+\+?|\+\d+\s+refine|per\s+(?:\d+\s+)?(?:total\s+set\s+)?refines?|\d+\s+pieces?|set\s+bonus|piece\s+bonus|innate|bonus|base\s+level\s+\d+\+?)\s*:\s*(?<rest>.+)$/i,
   // "Damage against all races +10%" / "Resistance vs Boss -5%"
-  vsGeneric: /^(?<kind>dmg|damage|resistance|res)\s+(?:vs|against|to)\s+(?<t>[A-Za-z /-]+?)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
+  // "Physical and magic damage vs Human and Demon +1%", "Defense vs All Sizes +5%", "Damage and Resistance vs All Sizes +5%"
+  vsGeneric: /^(?<kind>damage\s+and\s+resistance|physical(?:\s+and\s+magic(?:al)?)?\s+(?:dmg|damage)|dmg|damage|attack|resistance|res|defen[cs]e)\s+(?:vs\.?|against|to)\s+(?<t>[A-Za-z ,/-]+?)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
   statusResist: /^(?<st>freeze|stun|stone|curse|silence|sleep|blind|bleed|poison|confusion|frozen|petrify|status)\s+resistance\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
   fragment: /^(?:lv\s*\d+|\d+|[a-z][a-z ]{0,18}\s*[+-]\s*\d)/,
   perRefine: /^per\s+(?:(\d+)\s+)?(?:total\s+set\s+)?refines?\s*:?\s*$/i,
   perTotalSet: /^per\s+(?:(\d+)\s+)?total\s+set\s+refines?\s*:?\s*$/i,
   refineMin: /^(?:set\s+)?refine\s+(\d+)\+\s*:?\s*$/i,
   // ATK+10% | Perfect Dodge +7 | Move Speed: 003% | HP -25%
-  keyed: /^(?<k>[A-Za-z][A-Za-z0-9 '/&()-]*?)\s*[:]?\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?:s|secs?|seconds?|cells?)?$/,
+  keyed: /^(?<k>[A-Za-z][A-Za-z0-9 ,'/&()-]*?)\s*[:]?\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s*(?:s|secs?|seconds?|cells?)?$/,
   // ... per refine / per upgrade
   suffixPerRefine: /\s+per\s+(?:(\d+)\s+)?(refines?|upgrades?)$/i,
   slashUpgrade: /\/\s*upgrade$/i,
@@ -142,7 +163,7 @@ const RE = {
   chance: /^\s*(\d+(?:[.,]\d+)?)\s*%?\s*chance/i,
   situational: /\b(when|while|if|during|after|upon|every\s+\d+\s+sec|for\s+\d+\s+sec|chance)\b/i,
   dmgVs: /^(?:dmg|damage|atk)\s+(?:vs|against|to)\s+(?<t>[A-Za-z /]+?)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
-  resist: /^(?<t>[A-Za-z /]+?)\s+(?:resistance|res)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
+  resist: /^(?<t>[A-Za-z ,/]+?)\s+(?:resistance|resist|res)\s*(?<sign>[+-])?\s*(?<n>\d+(?:[.,]\d+)?)\s*%?$/i,
   skillLv: /^(?<s>[A-Za-z][A-Za-z '-]*?)\s+lv\s*:?\s*(?<n>\d+)$/i,
   extraDmgUpgrade: /^extra\s+(\d+(?:[.,]\d+)?)%\s+damage\s*\/\s*upgrade$/i,
   // "Takes effect 15 seconds after equipping." (gems): activation notice, not a bonus
@@ -155,12 +176,13 @@ const RE = {
   // inverted form: "+4% Move Speed", "+1 Magic Defense Penetration"
   numFirst: /^(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*(?<pct>%?)\s+(?<k>[A-Za-z][A-Za-z0-9 '/&-]*)$/,
   // "Rolling Flames +2% Damage" / "Claymore Trap -20% Damage"
-  skillDmgAfter: /^(?<s>[A-Za-z][A-Za-z '-]*?)\s+(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%\s+damage$/i,
+  skillDmgAfter: /^(?<s>[A-Za-z][A-Za-z ,'-]*?)\s+(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%\s+damage$/i,
   // "Conflagration -0.5 s cooldown"
   skillCdAfter: /^(?<s>[A-Za-z][A-Za-z '-]*?)\s+(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*s(?:ec(?:onds?)?)?\s+cooldown$/i,
 }
 
 const SKILL_SUFFIX = [
+  [/\s+cooldown\s+reduction$/i, 'skill_cooldown'],
   [/\s+(?:dmg|damage)$/i, 'skill_dmg'],
   [/\s+sp\s+cost$/i, 'skill_sp_cost'],
   [/\s+cooldown$/i, 'skill_cooldown'],
@@ -169,15 +191,25 @@ const SKILL_SUFFIX = [
 
 const num = (s) => Number(String(s).replace(',', '.'))
 // "Leech Power +5% (no rate)": a trailing note WITHOUT a number does not change the effect. With a number ("(3s)") it is a duration: keep it
-const clean = (l) => l.trim().replace(/^innate\s*:\s*/i, '').replace(/[.,;]+$/, '').replace(/(\d%?)\s*\((?![^)]*\d)[^)]*\)$/, '$1').trim()
+const clean = (l) => l.trim().replace(/%%/g, '%').replace(/^innate\s*:\s*/i, '').replace(/[.,;]+$/, '').replace(/(\d%?)\s*\((?![^)]*\d)[^)]*\)$/, '$1').trim()
 const norm = (k) => k.toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** "Demi-Humans" / "Human" / "Bosses" -> the vocabulary's singular names */
+const target1 = (p) => {
+  const t = p.replace(/-/g, '').replace(/\s+(element|elemental|race|size|monsters?|enemies|enemy|targets?|type)$/, '')
+  if (/^boss(es)?$/.test(t)) return 'boss'
+  // singular only when it is a known name: "Formless" stays (it used to become "formles")
+  const known = (x) => ELEMENTS.includes(x) || RACES.includes(x) || SIZES.includes(x)
+  const one = [t, t.replace(/s$/, ''), t.replace(/es$/, '')].find(known) ?? t.replace(/s$/, '')
+  return one === 'human' ? 'demihuman' : one
+}
 
 function scopeOf(target) {
   const t = norm(target).replace(/^(all\s+)?/, '').replace(/\s+(element|elemental|race|size|monsters?|type)$/g, '')
-  const parts = t.split(/\s*\/\s*|\s+and\s+/).map((p) => p.replace(/s$/, ''))
+  const parts = t.split(/\s*\/\s*|\s*,\s*|\s+and\s+/).map(target1)
   const out = []
   for (const p of parts) {
-    if (p === 'boss' || p === 'bosse') out.push(['dmg_vs_boss', {}])
+    if (p === 'boss') out.push(['dmg_vs_boss', {}])
     else if (ELEMENTS.includes(p)) out.push(['dmg_vs_element', { element: p }])
     else if (RACES.includes(p)) out.push(['dmg_vs_race', { race: p }])
     else if (SIZES.includes(p)) out.push(['dmg_vs_size', { size: p }])
@@ -189,7 +221,7 @@ function scopeOf(target) {
 function condFromMarker(txt) {
   const t = norm(txt)
   let m
-  if ((m = /^(?:set\s+)?refine\s+\+?(\d+)/.exec(t))) return { t: 'refine_min', n: +m[1] }
+  if ((m = /^(?:set\s+)?refine\s+\+?(\d+)/.exec(t)) || (m = /^\+(\d+)\s+refine/.exec(t))) return { t: 'refine_min', n: +m[1] }
   if ((m = /^per\s+(?:(\d+)\s+)?total\s+set\s+refines?/.exec(t))) return { t: 'per_set_refine', each: m[1] ? +m[1] : 1 }
   if ((m = /^per\s+(?:(\d+)\s+)?refines?/.exec(t))) return { t: 'per_refine', each: m[1] ? +m[1] : 1 }
   if ((m = /^(\d+)\s+pieces?/.exec(t))) return { t: 'set_pieces', n: +m[1] }
@@ -233,12 +265,49 @@ function unwrap(rawLines) {
       t = `${t} ${next}`
       i++
     }
+    // 2026-10-01: the dump wraps at ~28 characters, anywhere in a sentence. Keep joining while the line
+    // is visibly unfinished: "Critical +5, Critical Damage" / "+10%" (the last item has no number),
+    // "DMG vs non-boss +1% per" / "refine", "Critical +1, +1 per 5 base" / "DEX."
+    for (;;) {
+      const nx = (rawLines[i + 1] || '').trim()
+      if (!nx || /:\s*$/.test(t)) break
+      // last item of the line (after the last "," or ":") has no number: "Critical +5, Critical Damage" / "+10%",
+      // "Set refine 9+: After Cast" / "Delay -20%", "Per refine: HP +50, Move" / "Speed +1%"
+      const tail = t.split(/[,:]|\s+and\s+/).pop().trim()
+      const marker = /^(per\s|set\s|piece|innate|bonus|requirement)/i.test(nx) || /:\s*$/.test(nx)
+      // ...but not a sentence ("…a 5% chance to leave a field on the target, on level learned" + "MATK -10%")
+      const danglingKey = /\d/.test(t) && tail && !/\d/.test(tail) && tail.length <= 30 && /\d/.test(nx) && !marker && !/[).]$/.test(t)
+        && !/\b(chance|when|while|upon|during|learned|your|you|has|have|is|are|within|consumes|valid)\b/i.test(t)
+      const danglingPer = /\bper(\s+\d+)?$/i.test(t)
+      const danglingWord = /\b(base|of|and|or|vs\.?|to|by|the|with|total(\s+set)?|set|for|from|every|each)$/i.test(t) && !marker
+      // "+1% Resistance vs Dragon" / "and Undead"
+      const andNext = /^(and|or)\s/i.test(nx) && !/\d/.test(nx) && /\d/.test(t)
+      // "Physical and magic damage" / "vs Human" / "and Demon +1%": a heading with no number goes on
+      const vsNext = !/\d/.test(t) && /^(vs\.?|and|or|against)\s/i.test(nx) && t.length <= 42
+      if (!danglingKey && !danglingPer && !danglingWord && !andNext && !vsNext) break
+      t = `${t} ${nx}`
+      i++
+    }
     // split compounds: "ATK+3%,MATK+3%"
-    const joined = t.includes(',') && /\d/.test(t) && !RE.situational.test(t)
-      ? t.split(',').map((x) => x.trim()).filter(Boolean)
-      : [t]
+    // ...but not a list of targets: "Fire, Water, Wind and Earth Resistance +5%" (a part with no number)
+    // a part with no number is the head of a list and stays with the next part:
+    // "Queen's Brand, Plague Impress and Dragon Breath DMG+20%"
+    const split = []
+    let head = ''
+    for (const x of t.split(',').map((y) => y.trim()).filter(Boolean)) {
+      if (/\d/.test(x)) { split.push(head ? `${head}, ${x}` : x); head = '' } else head = head ? `${head}, ${x}` : x
+    }
+    if (head) split.push(split.length ? `${split.pop()}, ${head}` : head)
+    const joined0 = t.includes(',') && /\d/.test(t) && !RE.situational.test(t) ? split : [t]
+    // "ATK +1 and MATK +1 per set refine": two effects sharing the suffix
+    const joined = joined0.flatMap((x) => {
+      // also after a marker: "Set refine 18+: ASPD +10% and Variable Cast -10%"
+      const m = /^((?:[^:]*:\s*)?)([A-Za-z][A-Za-z '/-]*?\s*[+-]\s*\d+(?:[.,]\d+)?%?)\s+and\s+([A-Za-z][A-Za-z '/-]*?\s*[+-]\s*\d+(?:[.,]\d+)?\s*(?:s|%)?)\.?(\s+per\s+.+)?$/i.exec(x)
+      return m ? [m[1] + m[2] + (m[4] ?? ''), m[1] + m[3] + (m[4] ?? '')] : [x]
+    })
     // and two effects glued with no break: "Leech Power +10%Perfect Dodge +5"
-    const parts = joined.flatMap((x) => x.replace(GLUED, '$1\n').split('\n'))
+    // and two sentences: "ATK -2. MATK -2."
+    const parts = joined.flatMap((x) => x.replace(GLUED, '$1\n').replace(/(\d%?)\.\s+(?=[A-Z])/g, '$1\n').split('\n'))
     for (const part of parts) out.push({ text: part, line: i })
   }
   return out
@@ -270,7 +339,9 @@ export function parseDesc(desc, itemId) {
     const src = { itemId, line }
     const hasNum = /\d/.test(raw)
     if (hasNum) numeric++
-    const drop = (reason) => unparsed.push({ itemId, line, raw, reason })
+    // a line nothing could read that is about economy, drops, revival… is "not modeled", not "not understood"
+    const drop = (reason) => unparsed.push({ itemId, line, raw,
+      reason: reason !== 'sem_numero' && RE.notModeled.test(raw) ? 'nao_modelado' : reason })
     let l = clean(raw)
     let m
 
@@ -347,6 +418,16 @@ export function parseDesc(desc, itemId) {
 
     // --- condition in the line suffix ---
     let lineCond = inlineCond ?? cond
+    // "Lashing Andromeda DMG +5% +2% per refine": the same two steps on a skill
+    if ((m = RE.twoStep.exec(l)) && !ALIAS.has(norm(m.groups.k))) {
+      const hit = SKILL_SUFFIX.find(([rx]) => rx.test(norm(m.groups.k)))
+      if (hit) {
+        const sk = norm(m.groups.k).replace(hit[0], '').trim()
+        mods.push(mk(hit[1], (m.groups.s1 === '-' ? -1 : 1) * num(m.groups.n1), m.groups.p1 === '%', lineCond, { skill: sk }, src, raw))
+        mods.push(mk(hit[1], (m.groups.s2 === '-' ? -1 : 1) * num(m.groups.n2), m.groups.p2 === '%', { t: 'per_refine', each: 1 }, { skill: sk }, src, raw))
+        return
+      }
+    }
     if ((m = RE.twoStep.exec(l)) && ALIAS.has(norm(m.groups.k))) {
       const keys = ALIAS.get(norm(m.groups.k))
       for (const key of keys) {
@@ -356,7 +437,12 @@ export function parseDesc(desc, itemId) {
       lastKeys = keys
       return
     }
-    if ((m = RE.suffixPerRefine.exec(l))) {
+    if ((m = /\s+per\s+(?:(\d+)\s+)?(?:total\s+)?set\s+refines?$/i.exec(l))) {
+      // "ATK +1 per set refine" inside a set block: total refine of the set
+      const set = cond.t === 'set_bonus' ? cond.set : curSet ?? undefined
+      lineCond = { t: 'per_set_refine', each: m[1] ? +m[1] : 1, ...(set ? { set } : {}) }
+      l = l.slice(0, m.index).trim()
+    } else if ((m = RE.suffixPerRefine.exec(l))) {
       lineCond = { t: 'per_refine', each: m[1] ? +m[1] : 1 }
       l = l.slice(0, m.index).trim()
     } else if (RE.slashUpgrade.test(l)) {
@@ -372,11 +458,18 @@ export function parseDesc(desc, itemId) {
     // --- "Extra +1%" / "Extra 3% damage": continues the previous line's effect ---
     if ((m = RE.extraCont.exec(l))) {
       const rest = norm(m.groups.rest || '')
-      const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
+      // "Heal SP cost -9%, plus 9% more per refine": with no sign, "plus" goes the same way as the previous value
+      const inherit = !m.groups.sign && /plus/i.test(m.groups.lead) && lastMods.length && lastMods[0].value < 0 ? -1 : 1
+      const v = (m.groups.sign === '-' ? -1 : 1) * inherit * num(m.groups.n)
       const pct = m.groups.pct === '%'
       const keys = rest && ALIAS.has(rest) ? ALIAS.get(rest)
         : rest === 'damage' ? ['dmg_pct']
         : lastKeys
+      // no keyword: repeats the previous line's effects WITH their target ("Fire and Earth Resistance +5%" / "Extra +1% per refine")
+      if (!rest && lastMods.length && lastMods.some((x) => x.scope)) {
+        for (const prev of lastMods) mods.push(mk(prev.key, v, pct, lineCond, prev.scope, src, raw))
+        return
+      }
       if (keys) {
         for (const key of keys) mods.push(mk(key, v, pct, lineCond, null, src, raw))
         return
@@ -397,7 +490,8 @@ export function parseDesc(desc, itemId) {
     if (RE.activationDelay.test(l)) { drop('sem_numero'); return } // informational, not a bonus
     if ((m = RE.skillDmgAfter.exec(l))) {
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
-      mods.push(mk('skill_dmg', v, true, lineCond, { skill: norm(m.groups.s) }, src, raw)); lastKeys = ['skill_dmg']; return
+      for (const sk of norm(m.groups.s).split(/\s*,\s*|\s+and\s+/).filter(Boolean)) mods.push(mk('skill_dmg', v, true, lineCond, { skill: sk }, src, raw))
+      lastKeys = ['skill_dmg']; return
     }
     if ((m = RE.skillCdAfter.exec(l))) {
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
@@ -421,31 +515,74 @@ export function parseDesc(desc, itemId) {
       mods.push(mk('skill_lv', +m.groups.n, false, lineCond, { skill: norm(m.groups.s) }, src, raw)); return
     }
 
+    // prefixes that change nothing: "Special: ASPD +5%", "Dark Weapon +10% Damage vs Fire" (the endow is the item's)
+    l = l.replace(/^special\s*:\s*/i, '').replace(/^(?:neutral|water|earth|fire|wind|poison|holy|dark|ghost|undead)\s+weapon\s+/i, '').replace(/\bresist\.\s/i, 'resist ')
+    // "Holy damage taken -5% per upgrade": resistance to that element
+    if ((m = /^(?<e>neutral|water|earth|fire|wind|poison|holy|dark|ghost|undead)\s+damage\s+(?:taken|received)\s*(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%$/i.exec(l))) {
+      mods.push(mk('resist_element', (m.groups.sign === '-' ? 1 : -1) * num(m.groups.n), true, lineCond, { element: m.groups.e.toLowerCase() }, src, raw)); return
+    }
+    // "Reduces all physical damage by 1% per refine" (Deathland Greaves, Deathbound Armor, Deathcover Mantle)
+    if ((m = /^reduces\s+all\s+(?<k>physical|magic|special)\s+damage\s+by\s+(?<n>\d+(?:[.,]\d+)?)%$/i.exec(l))) {
+      const keys = { physical: ['resist_melee', 'resist_long'], magic: ['resist_matk'], special: ['resist_misc'] }[m.groups.k.toLowerCase()]
+      for (const key of keys) mods.push(mk(key, num(m.groups.n), true, lineCond, null, src, raw))
+      return
+    }
+    // "Increase resistance to all elements except Neutral by 1% per refine" (Asgard's Broken Wall)
+    if ((m = /^increase\s+resistance\s+to\s+all\s+elements\s+except\s+(?<x>\w+)\s+by\s+(?<n>\d+(?:[.,]\d+)?)%$/i.exec(l))) {
+      for (const e of ELEMENTS.filter((x) => x !== m.groups.x.toLowerCase())) mods.push(mk('resist_element', num(m.groups.n), true, lineCond, { element: e }, src, raw))
+      return
+    }
+    // "Regen 1 SP per refine every second", "Regenerates 5 SP per second", "Lose 5 HP per refine every second"
+    if ((m = /^(?<verb>regen(?:erates?)?|recovers?|lose|loses)\s+(?<n>\d+)\s+(?<w>sp|hp)(?<pr>\s+per\s+refine)?\s+(?:per|every)\s+second$/i.exec(l))) {
+      const v = (/^los/i.test(m.groups.verb) ? -1 : 1) * +m.groups.n
+      mods.push(mk(`${m.groups.w.toLowerCase()}_per_sec`, v, false, m.groups.pr ? { t: 'per_refine', each: 1 } : lineCond, null, src, raw)); return
+    }
+    // "Adds DEF equal to 10% of your total ATK" (Heir to the King)
+    if ((m = /^adds\s+(?<d>m?def)\s+equal\s+to\s+(?<n>\d+(?:[.,]\d+)?)%\s+of\s+your\s+total\s+(?<a>m?atk)$/i.exec(l))) {
+      mods.push(mk(`${m.groups.d.toLowerCase()}_from_${m.groups.a.toLowerCase()}`, num(m.groups.n), true, lineCond, null, src, raw)); return
+    }
+    // inverted target form: "+1% Resistance vs Dragon and Undead", "-10% Damage vs Dark"
+    if ((m = /^(?<n>[+-]?\s*\d+(?:[.,]\d+)?\s*%?)\s+(?<rest>(?:damage|dmg|resistance|attack|defen[cs]e)\s+(?:vs\.?|against|to)\s+.+)$/i.exec(l))) {
+      l = `${m.groups.rest.replace(/\s+to\s+/i, ' vs ')} ${m.groups.n.replace(/\s+/g, '')}`
+    }
+    // "Bonus AGI +3 if Base Stat is 99" (stat gloves): the stat itself, gated on its allocated value
+    if ((m = /^bonus\s+(?<st>str|agi|vit|int|dex|luk)\s*(?<sign>[+-])\s*(?<n>\d+)\s+if\s+base\s+stat\s+is\s+(?<min>\d+)$/i.exec(l))) {
+      const st = m.groups.st.toLowerCase()
+      const x = mk(st, (m.groups.sign === '-' ? -1 : 1) * +m.groups.n, false, lineCond, null, src, raw)
+      x.req = { stat: st, min: +m.groups.min }
+      mods.push(x); return
+    }
+    // "Double Attack Lv4 (40%)": the percentage is the rate
+    if ((m = /^double\s+attack\s+lv\s*\d+\s*\((?<n>\d+)%\)$/i.exec(l))) {
+      mods.push(mk('double_attack_rate', +m.groups.n, true, lineCond, null, src, raw)); return
+    }
     if ((m = RE.statusResist.exec(l))) {
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
       mods.push(mk('resist_status', v, true, lineCond, { status: norm(m.groups.st) }, src, raw)); return
     }
     if ((m = RE.vsGeneric.exec(l))) {
-      const isRes = /^res/i.test(m.groups.kind)
+      const kind = norm(m.groups.kind)
+      // "Damage and Resistance vs X" is both; "Defense vs X" is resistance
+      const sides = /and resistance/.test(kind) ? [false, true] : [/^(res|defen)/.test(kind)]
       const t = norm(m.groups.t)
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
-      if (/^non-?boss$/.test(t)) {
-        mods.push(mk(isRes ? 'resist_nonboss' : 'dmg_vs_nonboss', v, true, lineCond, null, src, raw)); return
-      }
-      if (/^all\s+(races?|elements?|sizes?)$/.test(t)) {
-        const kind = /race/.test(t) ? 'race' : /element/.test(t) ? 'element' : 'size'
-        const list = kind === 'race' ? RACES : kind === 'element' ? ELEMENTS : SIZES
-        const key = isRes ? `resist_${kind}` : `dmg_vs_${kind}`
-        for (const x of list) mods.push(mk(key, v, true, lineCond, { [kind]: x }, src, raw))
-        return
-      }
-      const pairs = scopeOf(t)
-      if (pairs.length) {
-        for (const [key, scope] of pairs) {
+      const before = mods.length
+      for (const isRes of sides) {
+        if (/^non-?boss(es)?$/.test(t)) {
+          mods.push(mk(isRes ? 'resist_nonboss' : 'dmg_vs_nonboss', v, true, lineCond, null, src, raw)); continue
+        }
+        if (/^all\s+(races?|elements?|sizes?)$/.test(t)) {
+          const k = /race/.test(t) ? 'race' : /element/.test(t) ? 'element' : 'size'
+          const list = k === 'race' ? RACES : k === 'element' ? ELEMENTS : SIZES
+          const key = isRes ? `resist_${k}` : `dmg_vs_${k}`
+          for (const x of list) mods.push(mk(key, v, true, lineCond, { [k]: x }, src, raw))
+          continue
+        }
+        for (const [key, scope] of scopeOf(t)) {
           mods.push(mk(isRes ? key.replace('dmg_vs', 'resist') : key, v, true, lineCond, scope, src, raw))
         }
-        return
       }
+      if (mods.length > before) return
     }
 
     // --- shape rules ---
@@ -462,7 +599,9 @@ export function parseDesc(desc, itemId) {
       const t = norm(m.groups.t)
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
       const before = mods.length
-      for (const p of t.split(/\s*\/\s*/)) {
+      for (const p0 of t.split(/\s*[/,]\s*|\s+and\s+/)) {
+        const p = /^all elements?$/.test(p0) ? 'all' : target1(p0)
+        if (p === 'all') { for (const e of ELEMENTS) mods.push(mk('resist_element', v, true, lineCond, { element: e }, src, raw)); continue }
         if (ELEMENTS.includes(p)) mods.push(mk('resist_element', v, true, lineCond, { element: p }, src, raw))
         else if (RACES.includes(p)) mods.push(mk('resist_race', v, true, lineCond, { race: p }, src, raw))
         else if (p === 'boss') mods.push(mk('resist_boss', v, true, lineCond, {}, src, raw))
@@ -483,7 +622,8 @@ export function parseDesc(desc, itemId) {
       }
       if (!hit && / lv$/.test(k)) hit = ['skill_lv', k.replace(/ lv$/, '')]
       if (hit) {
-        mods.push(mk(hit[0], v, pct, lineCond, { skill: hit[1] }, src, raw))
+        // "Queen's Brand, Plague Impress and Dragon Breath DMG+20%": one modifier per skill
+        for (const sk of hit[1].split(/\s*,\s*|\s+and\s+/).filter(Boolean)) mods.push(mk(hit[0], v, pct, lineCond, { skill: sk }, src, raw))
         lastKeys = [hit[0]]
         return
       }
