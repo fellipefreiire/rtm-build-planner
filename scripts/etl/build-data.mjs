@@ -49,7 +49,12 @@ function slotsOf(it) {
   if (it.grp === 'Costume') return ['costume']
   const locs = asArray(it.loc).map((l) => SLOT[l]).filter(Boolean)
   if (locs.length) return [...new Set(locs)]
-  if (it.grp === 'Shadow gear') return ['shadowArmor', 'shadowShoes', 'shadowGloves', 'shadowAcc']
+  if (it.grp === 'Shadow gear') {
+    // 53 pieces come with no loc (Illusion Soul, Legacy of Heroes…): the slot is the last word of the name.
+    // Without this every piece fit all four slots, so two copies of the same piece could be worn (2026-10-01)
+    const byName = { armor: 'shadowArmor', shoes: 'shadowShoes', gloves: 'shadowGloves', pendant: 'shadowAcc' }[/(\w+)$/.exec(it.name.trim())?.[1].toLowerCase()]
+    return byName ? [byName] : ['shadowArmor', 'shadowShoes', 'shadowGloves', 'shadowAcc']
+  }
   if (it.grp === 'Class gear') return ['rune']
   if (it.grp === 'Headgear') return ['upper']
   return []
