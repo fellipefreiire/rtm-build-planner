@@ -194,8 +194,11 @@ function main() {
       // element granted by the item: weapon endow and armor element (null = unchanged)
       ...(() => { const e = elementsOf(desc, slots); return { endow: e.endow, armorEl: e.armorEl } })(),
       // gems carry their class in the new `cls` column, with `jobs` empty
-      jobs: it.jobs && String(it.jobs) ? String(it.jobs).split(', ').filter(Boolean)
-        : Array.isArray(it.cls) && it.cls.length ? it.cls.map(String) : null,
+      jobs: (() => {
+        const base = it.jobs && String(it.jobs) ? String(it.jobs).split(', ').filter(Boolean)
+        : Array.isArray(it.cls) && it.cls.length ? it.cls.map(String) : null
+        return base && ov.jobsAdd ? [...new Set([...base, ...ov.jobsAdd])] : base
+      })(),
       mods,
       unparsed: unparsed.filter((u) => u.reason !== 'sem_numero' || /[+-]\d|\d+%/.test(u.raw)),
     })

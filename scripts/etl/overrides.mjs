@@ -83,6 +83,13 @@ export const ITEM_OVERRIDES = {
     desc: [['ATK +1 every 20 flee', 'ATK Per 20 Flee +1']],
     why: 'Maiden of Time set "ATK +1 every 20 flee" rewritten in the parser format (server combo: bBaseAtk + FLEE/20) [db]',
   }])),
+  'Ingwaz Rune of Potential': {
+    desc: [['ATK +5 / MATK +5', 'ATK +5\nMATK +5']],
+    // the site lists "Unchained Classes" (the three 2nd jobs); the server script is Assassin/Crusader/Rogue with
+    // Classes Normal + Upper, so the 3rd job (Phantom Thief = Paladin in the emulator) wears it too
+    jobsAdd: ['Phantom Thief'],
+    why: '"ATK +5 / MATK +5" split for the parser; Phantom Thief added (item_db: Classes Upper) [emu]',
+  },
   Edge: {
     desc: [['If Refine is +7 or higher:\nDouble Effect', 'If Refine is +7 or higher:\nDelta Skyfall Cooldown -0.5s\nDelta Skyfall DMG+20%\nHP+2%']],
     // the Defense Penetration sits above a blank line, apart from the block being doubled: left single [estimated]
