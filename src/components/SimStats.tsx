@@ -13,8 +13,12 @@ export default function SimStats({ base, buffed, mob }: { base: StatSheet; buffe
   // crit ≥ 140 = 100% on any target (RTM); below that, crit − target LUK ÷ 5 (emu)
   const chance = (s: StatSheet) => (s.critRate.v >= 140 ? 100 : Math.min(100, Math.max(0, s.critRate.v - luk / 5)))
   const shield = (s: StatSheet) => (s.shield?.v ?? 0) + (s.maxHp?.v ?? 0)
-  const roarBoost = (s: StatSheet) => s.totals.scoped.skill_dmg?.['roaring overslash'] ?? 0
   const p = (s: StatSheet, k: string) => (s.totals.pct[k] ?? 0) + (s.totals.flat[k] ?? 0)
+  // 2026-10-02: the rows used to say "Roaring" for every class; now they follow the class's reference skill
+  const skill = (buffed.skillName ?? 'skill').replace(/\b\w/g, (c) => c.toUpperCase())
+  const boost = (s: StatSheet) => (s.skillName ? s.totals.scoped.skill_dmg?.[s.skillName] ?? 0 : 0)
+  const ranged = buffed.rangeType === 'ranged'
+  const hasShield = !!(base.shield || buffed.shield)
 
   const rows: [string, (s: StatSheet) => number, string?][] = [
     ['STR', (s) => s.stats.str], ['AGI', (s) => s.stats.agi], ['VIT', (s) => s.stats.vit],
@@ -26,9 +30,10 @@ export default function SimStats({ base, buffed, mob }: { base: StatSheet; buffe
     ['Crit damage', (s) => s.critDmg.v, '%'],
     ['ASPD', (s) => s.aspd?.v ?? 0],
     ['MaxHP', (s) => s.maxHp?.v ?? 0], ['MaxSP', (s) => s.maxSp?.v ?? 0],
-    ['Leech Power', (s) => s.leechPower.v, '%'], ['Max shield (with HP)', shield],
-    ['Roaring %', (s) => s.skillPct?.v ?? 0, '%'], ['Roaring skillboost', roarBoost, '%'],
-    ['Melee', (s) => p(s, 'melee_dmg'), '%'],
+    ['Leech Power', (s) => s.leechPower.v, '%'],
+    ...(hasShield ? [['Max shield (with HP)', shield] as [string, (s: StatSheet) => number]] : []),
+    [`${skill} %`, (s) => s.skillPct?.v ?? 0, '%'], [`${skill} skillboost`, boost, '%'],
+    ranged ? ['Ranged', (s) => p(s, 'ranged_dmg'), '%'] : ['Melee', (s) => p(s, 'melee_dmg'), '%'],
     ['After Cast Delay', (s) => p(s, 'after_cast_delay'), '%'], ['Variable cast', (s) => p(s, 'cast_time'), '%'],
     ['SP Cost', (s) => p(s, 'sp_cost'), '%'],
   ]
