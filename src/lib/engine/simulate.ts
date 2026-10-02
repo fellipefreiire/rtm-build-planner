@@ -45,7 +45,9 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   // Seven Winds / Enchant Poison: the best endow vs this target (Venom Mark boosts Poison)
   let elem = { v: sheet.weaponElement.v, from: sheet.weaponElement.from }
   const elMult = (el: string) => elementMultiplier(el, mob.element, mob.elv) * (1 + (sheet.elementBonus[el] ?? 0) / 100)
-  for (const c of sheet.endowChoices) if (elMult(c.el) > elMult(elem.v)) elem = { v: c.el, from: c.label }
+  const forced = sheet.endowChoices.find((c) => c.forced)
+  if (forced) elem = { v: forced.el, from: forced.label }
+  else for (const c of sheet.endowChoices) if (elMult(c.el) > elMult(elem.v)) elem = { v: c.el, from: c.label }
   const elemAtk = elMult(elem.v)
   const penEff = penEffect(sheet.defPen.v)
   const mobDefLeft = mob.def * (1 - penEff)

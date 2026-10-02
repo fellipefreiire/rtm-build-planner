@@ -1,7 +1,7 @@
 // Phantom Thief rules (Master Thief Arts) and the Edge "Double Effect" at +7 — 2026-10-02.
 import { describe, expect, it } from 'vitest'
 import { computeSheet } from '@/lib/engine/sheet'
-import { rulesFor } from '@/lib/rules/classes'
+import { learnedToggles, rulesFor } from '@/lib/rules/classes'
 import { emptyBuild } from '@/lib/build-url'
 import { Build, SlotId } from '@/lib/types'
 import { byId, find, skillBy } from './fixtures'
@@ -77,6 +77,13 @@ describe('2026-10-02: server damage layers', () => {
     expect(layer(enc('Doomfist'), 'weapon element').why).toMatch(/^Water \(Seven Winds Lv3\)/)
     expect(layer(enc('Meteor Golem'), 'weapon element').why).toMatch(/^Wind \(Seven Winds Lv2\)/)
     expect(layer(enc('Doomfist'), 'weapon element').mult).toBe(1.25)
+  })
+  it('Seven Winds at a picked level uses that element, even if another hits harder', () => {
+    const b = build('Phantom Thief', [['weapon', 'Edge', 7]], { 'phantom-thief/seven-winds': 7 })
+    const toggles = learnedToggles(rulesFor('Phantom Thief'), b.skills, { sevenWinds: true }, { sevenWinds: 4 })
+    const w = layer(sim(b, toggles).enc('Doomfist'), 'weapon element')
+    expect(w.why).toMatch(/^Fire \(Seven Winds Lv4\)/)
+    expect(w.mult).toBeLessThan(1)   // Fire vs Fire 1
   })
   it('Seven Winds only offers the learned levels', () => {
     const b = build('Phantom Thief', [['weapon', 'Edge', 7]], { 'phantom-thief/seven-winds': 3 })

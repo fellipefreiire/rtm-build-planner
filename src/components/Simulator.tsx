@@ -65,14 +65,14 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
       ...r,
       rot: runRotation({
         build: r.build, byId, steps: rotation, levels, skills: skillByKey, rules,
-        toggles: learnedToggles(rules, r.build.skills, sim.buffs), food, mob, k, hpPct: sim.hpPct,
+        toggles: learnedToggles(rules, r.build.skills, sim.buffs, sim.buffLv), food, mob, k, hpPct: sim.hpPct,
       }),
     }))
     // current build attributes: bare × with the checked buffs and food, for the class's first skill
     const ref = palette[0] ?? null
     const cur = { ...build, skillKey: ref?.key ?? null }
     const statsBase = computeSheet(cur, byId, ref, rules, {}, null)
-    const statsBuffed = computeSheet(cur, byId, ref, rules, learnedToggles(rules, build.skills, sim.buffs), food)
+    const statsBuffed = computeSheet(cur, byId, ref, rules, learnedToggles(rules, build.skills, sim.buffs, sim.buffLv), food)
     return { out, mob, statsBase, statsBuffed }
   }, [sim, rows, rules, build, rotation, levels, palette])
 
@@ -149,6 +149,14 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
               <label key={t.id} className="sim-chk" title={t.why}>
                 <input type="checkbox" checked={!!sim.buffs[t.id]} onChange={(e) => { const v = e.target.checked; set((s) => { s.buffs[t.id] = v; return s }) }} />
                 <span>{t.label}</span>
+                {t.levels && (
+                  <select value={sim.buffLv[t.id] ?? 0} disabled={!sim.buffs[t.id]} style={{ marginLeft: 4 }}
+                    onChange={(e) => { const v = Number(e.target.value); set((s) => { s.buffLv[t.id] = v; return s }) }}>
+                    {t.levels.filter((o) => !o.lv || !t.skill || o.lv <= (build.skills[t.skill] ?? 0)).map((o) => (
+                      <option key={o.lv} value={o.lv}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
               </label>
             ))}
             {(

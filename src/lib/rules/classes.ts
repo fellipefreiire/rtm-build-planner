@@ -21,6 +21,8 @@ export type Toggle = {
   id: string; label: string; default: boolean; why: string
   /** skill tree entry that must be learned for the buff to exist */
   skill?: string
+  /** buff with a level choice in the Simulator (Seven Winds: 0 = best vs the target, 1..7 = that element) */
+  levels?: { lv: number; label: string }[]
 }
 
 /** Buff modifier: applied together with gear, before stats. */
@@ -43,7 +45,7 @@ export type ClassRules = {
   /** bonuses the class has with no items and no skills allocated in the planner (measured) */
   innate: { hpRate: number; hit: number; pd: number; why: string } | null
   /** weapon endows the class can cast (Seven Winds, Enchant Poison); the Simulator picks the best vs the target */
-  endows?: (toggles: Record<string, boolean>, skills: Record<string, number>) => { el: string; label: string }[]
+  endows?: (toggles: Record<string, boolean>, skills: Record<string, number>) => { el: string; label: string; forced?: boolean }[]
   /** % extra damage of an attack element on the target (Venom Mark: Poison) */
   elementBonus?: (toggles: Record<string, boolean>, skills: Record<string, number>) => Record<string, number>
   /** class rules for Shadow gear: extra refine per piece and sets that activate with a single piece */
@@ -264,8 +266,11 @@ const thiefLineMods = (t: Record<string, boolean>, c?: { skills: Record<string, 
   return out
 }
 const thiefEndows: NonNullable<ClassRules['endows']> = (t, skills) => {
-  const out: { el: string; label: string }[] = []
+  const out: { el: string; label: string; forced?: boolean }[] = []
   const sw = skills['phantom-thief/seven-winds'] ?? 0
+  // level picked in the Simulator ("sevenWinds:lv3"): that element, even if another would hit harder
+  const picked = SEVEN_WINDS.findIndex((_, i) => t[`sevenWinds:lv${i + 1}`]) + 1
+  if (t.sevenWinds && sw && picked && picked <= sw) return [{ el: SEVEN_WINDS[picked - 1], label: `Seven Winds Lv${picked}`, forced: true }]
   if (t.sevenWinds && sw) SEVEN_WINDS.slice(0, sw).forEach((el, i) => out.push({ el, label: `Seven Winds Lv${i + 1}` }))
   if (t.enchantPoison && (skills['thief/enchant-poison'] ?? 0)) out.push({ el: 'Poison', label: 'Enchant Poison' })
   return out
@@ -281,7 +286,8 @@ const PHANTOM_THIEF: ClassRules = {
   name: 'Phantom Thief',
   simBuffs: [
     { id: 'readyToRip', skill: 'phantom-thief/ready-to-rip', label: 'Ready to Rip', default: true, why: 'Lv N: HIT +10×N, ATK +(1+N)%, DEF −(5+5N)%. 50 s / CD 2 min. ATK fixed in Patch 15. [db]' },
-    { id: 'sevenWinds', skill: 'phantom-thief/seven-winds', label: 'Seven Winds', default: true, why: 'Weapon endow: Lv1 Earth, 2 Wind, 3 Water, 4 Fire, 5 Ghost, 6 Dark, 7 Holy. The Simulator uses the best element vs the target (up to the learned level); only when no item grants an element. [db]' },
+    { id: 'sevenWinds', skill: 'phantom-thief/seven-winds', label: 'Seven Winds', default: true, why: 'Weapon endow: Lv1 Earth, 2 Wind, 3 Water, 4 Fire, 5 Ghost, 6 Dark, 7 Holy. "Auto" uses the best element vs the target (up to the learned level); a level uses that element. Only when no item grants an element. [db]',
+      levels: [{ lv: 0, label: 'Auto (best vs target)' }, ...SEVEN_WINDS.map((el, i) => ({ lv: i + 1, label: `Lv${i + 1} ${el}` }))] },
     { id: 'venomMark', skill: 'phantom-thief/venom-mark', label: 'Venom Mark', default: false, why: 'Target takes +5%/level from Poison attacks (with Enchant Poison). [db]' },
     ...THIEF_LINE_BUFFS,
   ],
@@ -315,10 +321,13 @@ export const rulesFor = (cls: string): ClassRules => TABLE[cls] ?? GENERIC(cls)
  * Effective toggles of a build in the Simulator: a buff whose skill is not learned stays
  * off. Combo Ready is on by default (only off if the user unchecks it).
  */
-export function learnedToggles(rules: ClassRules, skills: Record<string, number>, chosen: Record<string, boolean>) {
-  return Object.fromEntries(rules.simBuffs.map((t) => {
+export function learnedToggles(rules: ClassRules, skills: Record<string, number>, chosen: Record<string, boolean>, levels: Record<string, number> = {}) {
+  const out: Record<string, boolean> = Object.fromEntries(rules.simBuffs.map((t) => {
     const learned = !t.skill || (skills[t.skill] ?? 0) > 0
     const on = t.id === 'comboReady' ? chosen[t.id] !== false : !!chosen[t.id]
     return [t.id, learned && on]
   }))
+  // buff level picked in the Simulator travels as "<id>:lv<n>" (0 = auto, no key)
+  for (const t of rules.simBuffs) if (t.levels && out[t.id] && levels[t.id]) out[`${t.id}:lv${levels[t.id]}`] = true
+  return out
 }

@@ -70,7 +70,7 @@ export type StatSheet = {
   /** the chosen skill's attack range: range >= 4 cells is ranged (battle.cpp battle_range_type) [emu] */
   rangeType: 'melee' | 'ranged'
   /** endows the Simulator may pick per target (Seven Winds, Enchant Poison); empty if an item grants the element */
-  endowChoices: { el: string; label: string }[]
+  endowChoices: { el: string; label: string; forced?: boolean }[]
   /** % extra damage of an attack element on the target (Venom Mark) */
   elementBonus: Record<string, number>
   /** flat damage added after every multiplier (Soul Destroyer's second part) */

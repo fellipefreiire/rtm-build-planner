@@ -9,6 +9,8 @@ export type SimState = {
   selected: string[]
   mobName: string
   buffs: Record<string, boolean>
+  /** level picked for buffs with a level choice (Seven Winds); 0 / absent = auto */
+  buffLv: Record<string, number>
   food: { stat: StatKey; value: number }
   /** timeline skill sequence (skill tree keys) — legacy, only read to migrate into `rotations` */
   rotation?: string[]
@@ -30,6 +32,7 @@ export const defaultSim = (buffDefaults: Record<string, boolean>): SimState => (
   selected: ['current'],
   mobName: 'Average Dummy',
   buffs: buffDefaults,
+  buffLv: {},
   food: { stat: 'luk', value: 0 },
   rotations: {
     Revenant: ['trickster/scythe-reap', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/reaping-slash', 'revenant/roaring-overslash'],
@@ -79,7 +82,7 @@ export function loadSim(buffDefaults: Record<string, boolean>): SimState {
   }
   const { rotation: _legacy, ...rest } = s
   void _legacy
-  return { ...d, ...rest, rotations, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, food: { ...d.food, ...(s.food ?? {}) }, lanesShown: { ...d.lanesShown, ...(s.lanesShown ?? {}) }, skillLv }
+  return { ...d, ...rest, rotations, buffs: { ...d.buffs, ...(s.buffs ?? {}) }, buffLv: { ...(s.buffLv ?? {}) }, food: { ...d.food, ...(s.food ?? {}) }, lanesShown: { ...d.lanesShown, ...(s.lanesShown ?? {}) }, skillLv }
 }
 export const saveSim = (s: SimState) => write(K_SIM, s)
 
