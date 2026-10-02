@@ -23,6 +23,8 @@ export type Toggle = {
   skill?: string
   /** buff with a level choice in the Simulator (Seven Winds: 0 = best vs the target, 1..7 = that element) */
   levels?: { lv: number; label: string }[]
+  /** the choices are a count (coins), not skill levels: do not cap them at the learned level */
+  levelsAreCount?: boolean
 }
 
 /** Buff modifier: applied together with gear, before stats. */
@@ -288,10 +290,26 @@ const PHANTOM_THIEF: ClassRules = {
     { id: 'readyToRip', skill: 'phantom-thief/ready-to-rip', label: 'Ready to Rip', default: true, why: 'Lv N: HIT +10×N, ATK +(1+N)%, DEF −(5+5N)%. 50 s / CD 2 min. ATK fixed in Patch 15. [db]' },
     { id: 'sevenWinds', skill: 'phantom-thief/seven-winds', label: 'Seven Winds', default: true, why: 'Weapon endow: Lv1 Earth, 2 Wind, 3 Water, 4 Fire, 5 Ghost, 6 Dark, 7 Holy. "Auto" uses the best element vs the target (up to the learned level); a level uses that element. Only when no item grants an element. [db]',
       levels: [{ lv: 0, label: 'Auto (best vs target)' }, ...SEVEN_WINDS.map((el, i) => ({ lv: i + 1, label: `Lv${i + 1} ${el}` }))] },
+    { id: 'duelCounters', skill: 'phantom-thief/coin-flip', label: 'Coins (Duel Counters)', default: false, levelsAreCount: true,
+      why: 'Coin Flip coins count as Duel Counters [dev on Discord 2026-09-23]. Delta Skyfall: +1% per VIT for every 2 counters; Riposte: +1% per VIT per counter (Patch 11/12/15). Up to 10 coins. [db + report]',
+      levels: Array.from({ length: 11 }, (_, n) => ({ lv: n, label: `${n} coin${n === 1 ? '' : 's'}` })) },
     { id: 'venomMark', skill: 'phantom-thief/venom-mark', label: 'Venom Mark', default: false, why: 'Target takes +5%/level from Poison attacks (with Enchant Poison). [db]' },
     ...THIEF_LINE_BUFFS,
   ],
   endows: thiefEndows,
+  // Duel Counters (coins): read as added skill %, like the other "+N% per stat" lines [estimated: the text does not say]
+  skillPctExtra: ({ stats, toggles, skillKey }) => {
+    const n = Array.from({ length: 10 }, (_, i) => i + 1).find((k) => toggles[`duelCounters:lv${k}`]) ?? 0
+    if (!toggles.duelCounters || !n) return []
+    if (skillKey === 'phantom-thief/delta-skyfall') {
+      const pts = Math.floor(n / 2)
+      return pts ? [{ label: `Duel Counters ×${n}`, value: pts * stats.vit, prov: 'reported', why: `+1% per VIT for every 2 counters: ${pts} × VIT ${stats.vit}` }] : []
+    }
+    if (skillKey === 'phantom-thief/riposte') {
+      return [{ label: `Duel Counters ×${n}`, value: n * stats.vit, prov: 'reported', why: `+1% per VIT per counter: ${n} × VIT ${stats.vit}` }]
+    }
+    return []
+  },
   elementBonus: (t, skills): Record<string, number> => (t.venomMark && skills['phantom-thief/venom-mark'] ? { Poison: 5 * skills['phantom-thief/venom-mark'] } : {}),
   buffMods: (t, c) => {
     const out = [...thiefBuffMods(t, c), ...thiefLineMods(t, c)]

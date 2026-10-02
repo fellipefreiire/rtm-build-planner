@@ -152,7 +152,7 @@ export default function Simulator({ build, onSwitch }: { build: Build; onSwitch:
                 {t.levels && (
                   <select value={sim.buffLv[t.id] ?? 0} disabled={!sim.buffs[t.id]} style={{ marginLeft: 4 }}
                     onChange={(e) => { const v = Number(e.target.value); set((s) => { s.buffLv[t.id] = v; return s }) }}>
-                    {t.levels.filter((o) => !o.lv || !t.skill || o.lv <= (build.skills[t.skill] ?? 0)).map((o) => (
+                    {t.levels.filter((o) => t.levelsAreCount || !o.lv || !t.skill || o.lv <= (build.skills[t.skill] ?? 0)).map((o) => (
                       <option key={o.lv} value={o.lv}>{o.label}</option>
                     ))}
                   </select>

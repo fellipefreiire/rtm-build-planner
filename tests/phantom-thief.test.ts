@@ -112,3 +112,14 @@ describe('Maiden of Time set (2026-10-02)', () => {
     expect(b.atk.from.join(' ')).toContain(`${Math.floor(b.flee.v / 20)} from FLEE`)
   })
 })
+
+describe('Coin Flip coins as Duel Counters (2026-10-02)', () => {
+  it('Delta Skyfall gets +VIT% per 2 coins', () => {
+    const b = build('Phantom Thief', [['weapon', 'Edge', 7]], { 'phantom-thief/coin-flip': 5 })
+    b.stats.vit = 64
+    const R = rulesFor('Phantom Thief')
+    const none = computeSheet(b, byId, skillBy(DELTA), R, learnedToggles(R, b.skills, {}))
+    const five = computeSheet(b, byId, skillBy(DELTA), R, learnedToggles(R, b.skills, { duelCounters: true }, { duelCounters: 5 }))
+    expect(five.skillPct!.v - none.skillPct!.v).toBe(2 * five.stats.vit)
+  })
+})
