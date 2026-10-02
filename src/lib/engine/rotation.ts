@@ -251,7 +251,8 @@ export function runRotation(i: RotationInput): RotationResult {
     let c0 = spCost(sheetNow, s, lv, sp)
     let waited = 0
     const want = start
-    while (sp < c0.total && spPerSec > 0) {
+    // with SP full it cannot climb further: a cost above MaxSP would wait forever (froze the tab, 2026-10-01)
+    while (sp < c0.total && spPerSec > 0 && sp < maxSp) {
       start = nextTick()
       spTo(start)
       c0 = spCost(sheetNow, s, lv, sp)
@@ -260,8 +261,11 @@ export function runRotation(i: RotationInput): RotationResult {
       waited = start - want
       notes.push(`waited ${waited.toFixed(1)} s for SP`)
     }
+    // not enough SP even when full (cost above MaxSP, or no regen): the cast fails in-game
+    const noSp = sp < c0.total
+    if (noSp) notes.push(`not enough SP: costs ${Math.ceil(c0.total)}, MaxSP ${Math.floor(maxSp)} — the cast fails, no damage`)
     const spBefore = sp
-    sp -= c0.total
+    if (!noSp) sp -= c0.total
     spPush(start)
     const spEv = { before: spBefore, cost: c0.total, flat: c0.flat, pctPart: c0.total - c0.flat, after: sp }
 
@@ -283,7 +287,7 @@ export function runRotation(i: RotationInput): RotationResult {
     const plan = rr.cast(c, state)
     const stacksBefore = plan.stacksBefore ?? rr.stacks?.(state) ?? 0
     notes.push(...plan.notes)
-    const damage = damageOf(s, lv, plan, notes)
+    const damage = noSp ? 0 : damageOf(s, lv, plan, notes)
     const leech = heal(damage)
     rr.after(c, state)
     const autocasts = autocastEvents(c, s.name)

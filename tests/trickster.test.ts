@@ -114,3 +114,16 @@ describe('Multi-position headgear', () => {
     expect(s.matk.v).not.toBe(without.matk.v)
   })
 })
+
+describe('SP cost above MaxSP', () => {
+  it('the rotation does not wait forever: the cast fails with no damage', () => {
+    const b = trickster(null)
+    b.baseLv = 1
+    b.stats = { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 }
+    b.skills[DM] = 10
+    const r = runRotation({ build: b, byId, steps: [DM, DM], skills: skillMap, rules: rulesFor('Trickster'), toggles: {}, food: null, mob: mobBy('Average Dummy'), k: null })
+    expect(r.sp.max).toBeLessThan(50)
+    expect(r.events.map((e) => e.damage)).toEqual([0, 0])
+    expect(r.events[0].notes.join(' ')).toMatch(/not enough SP/)
+  })
+})
