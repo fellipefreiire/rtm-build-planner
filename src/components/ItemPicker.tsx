@@ -23,13 +23,15 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
     [isCard, slot.from, slot.id, cls],
   )
 
-  const list = useMemo(() => {
+  // 2026-10-02: the list used to stop at 60 rows with no way to see the rest (Godslayer, the Shadow sets
+  // after "K" never showed up without a search); now it grows 100 at a time
+  const [limit, setLimit] = useState(60)
+  const all = useMemo(() => {
     const needle = q.trim().toLowerCase()
     const base = needle ? pool.filter((i) => i.name.toLowerCase().includes(needle)) : pool
-    return [...base]
-      .sort((a, b) => a.cat.localeCompare(b.cat) || a.name.localeCompare(b.name))
-      .slice(0, 60)
+    return [...base].sort((a, b) => a.cat.localeCompare(b.cat) || a.name.localeCompare(b.name))
   }, [pool, q])
+  const list = all.slice(0, limit)
 
   return (
     <>
@@ -39,7 +41,7 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
       <input
         placeholder="search…"
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => { setQ(e.target.value); setLimit(60) }}
         style={{ width: '100%', marginBottom: 7 }}
       />
       <div className="scroll-list" style={{ marginTop: 8 }}>
@@ -98,6 +100,11 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
             </div>
           </div>
         ))}
+        {all.length > list.length && (
+          <div className="card pick-row" style={{ justifyContent: 'center', cursor: 'pointer' }} onClick={() => setLimit((n) => n + 100)}>
+            <b>show more ({all.length - list.length} left)</b>
+          </div>
+        )}
         {list.length === 0 && <small>Nothing found for this slot.</small>}
       </div>
       <small>
