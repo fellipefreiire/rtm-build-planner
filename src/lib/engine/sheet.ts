@@ -127,6 +127,26 @@ function condMultiplier(
   }
 }
 
+/**
+ * Slots taken by another piece: the off-hand under a two-handed weapon, and the headgear positions
+ * of a multi-position headgear (Crown of Deceit in upper also takes mid). Head slots are read in
+ * order upper → mid → lower; a piece already covered by an earlier one does not block anything.
+ */
+export function lockedSlots(build: Build, byId: Map<number, Item>): Partial<Record<SlotId, { by: Item; from: SlotId; why: string }>> {
+  const out: Partial<Record<SlotId, { by: Item; from: SlotId; why: string }>> = {}
+  const weapon = build.slots.weapon ? byId.get(build.slots.weapon.id) : undefined
+  if (weapon?.twoHanded) out.offhand = { by: weapon, from: 'weapon', why: 'two-handed' }
+  for (const s of ['upper', 'mid', 'lower'] as const) {
+    const e = build.slots[s]
+    const item = e ? byId.get(e.id) : undefined
+    if (!item?.occupies || out[s]) continue
+    for (const o of item.occupies) {
+      if (o !== s && !out[o as SlotId]) out[o as SlotId] = { by: item, from: s, why: `${item.occupies.join(' + ')}` }
+    }
+  }
+  return out
+}
+
 export function computeSheet(
   build: Build,
   byId: Map<number, Item>,
@@ -138,20 +158,22 @@ export function computeSheet(
 ): StatSheet {
   const equipped: EquippedPiece[] = []
   const skippedSlots: StatSheet['skipped'] = []
-  // a two-handed weapon occupies both hands: the off-hand does not count
-  const weaponItem = build.slots.weapon ? byId.get(build.slots.weapon.id) : undefined
-  const blocksOffhand = !!weaponItem?.twoHanded
+  // a two-handed weapon takes the off-hand; a multi-position headgear takes its other positions
+  const locked = lockedSlots(build, byId)
 
   for (const s of SLOTS) {
     const e = build.slots[s.id]
     if (!e) continue
     const item = byId.get(e.id)
     if (!item) continue
-    if (s.id === 'offhand' && blocksOffhand) {
+    const lock = locked[s.id]
+    if (lock) {
       skippedSlots.push({
         raw: item.name,
         itemName: item.name,
-        why: `off-hand ignored: ${weaponItem!.name} is a two-handed weapon`,
+        why: s.id === 'offhand'
+          ? `off-hand ignored: ${lock.by.name} is a two-handed weapon`
+          : `${s.label} ignored: ${lock.by.name} (in ${lock.from}) takes ${lock.why}`,
       })
       continue
     }

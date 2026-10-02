@@ -102,6 +102,8 @@ export type Item = {
   slots: string[]; cardSlots: number; lv: number
   atk: number; matk: number; def: number; mdef: number; weight: number
   refinable: boolean; twoHanded: boolean
+  /** headgear positions taken at once, whichever slot holds it (Crown of Deceit: upper + mid) */
+  occupies?: string[]
   /** weapon level (1–4); 0 = not a weapon */
   wlv?: number
   /** dropped by a mob or from a coffer: only these roll random options */

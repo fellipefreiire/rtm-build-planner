@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { Build, Item, SlotId, SLOTS } from '@/lib/types'
 import { byId, itemsForSlot } from '@/lib/data'
+import { lockedSlots } from '@/lib/engine/sheet'
 import { effectivePicks, optionTableFor, optShort } from '@/lib/rules/random-options'
 import { dreamById } from '@/lib/rules/dream-enchants'
 import ItemIcon from './ItemIcon'
@@ -37,15 +38,16 @@ type Props = {
  * Fixed-height slot: never grows with its content. Cards become icons and the
  * random options a single line; details go in the tooltip and editing in the modal.
  */
-function Slot({ id, build, active, onClear, onOpen, onSwitch, lockedBy }: Props & { id: SlotId; lockedBy?: Item }) {
+function Slot({ id, build, active, onClear, onOpen, onSwitch, lock }: Props & { id: SlotId; lock?: { by: Item; from: SlotId; why: string } }) {
+  const lockedBy = lock?.by
   const tip = useTip()
   const meta = SLOTS.find((s) => s.id === id)!
   const entry = build.slots[id]
   const item: Item | undefined = lockedBy ?? (entry ? byId.get(entry.id) : undefined)
   const disponiveis = useMemo(() => itemsForSlot(meta.from, build.cls, true).length, [meta.from, build.cls])
 
-  // with a two-handed weapon the off-hand mirrors the weapon and its cards
-  const cardIds = lockedBy ? build.slots.weapon?.cards ?? [] : entry?.cards ?? []
+  // a locked slot mirrors the piece that takes it, with its cards (two-handed weapon, Crown of Deceit)
+  const cardIds = lock ? build.slots[lock.from]?.cards ?? [] : entry?.cards ?? []
   const cards = item ? Array.from({ length: item.cardSlots }, (_, ci) => (cardIds[ci] != null ? byId.get(cardIds[ci]) : undefined)) : []
   const table = lockedBy ? null : optionTableFor(item, id)
   const opts = table
@@ -78,7 +80,7 @@ function Slot({ id, build, active, onClear, onOpen, onSwitch, lockedBy }: Props 
             <button className={`eq-sw ${hasSwitch ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); onSwitch(id) }}
               title={hasSwitch ? `switch: swap to ${altItem ? altItem.name : 'the empty reserve'}` : 'switch: keep this item as reserve and equip another'}>⇄</button>
           )}
-          {lockedBy ? <span className="dim">two-handed</span>
+          {lock ? <span className="dim">{lock.why}</span>
             : item ? <button className="eq-x" onClick={(e) => { e.stopPropagation(); onClear(id) }} title="unequip">×</button>
             : <span className="dim">{disponiveis}</span>}
         </span>
@@ -107,15 +109,13 @@ export default function EquipWindow(props: Props) {
   const sealTab = tab === 'odin' || tab === 'ama' ? tab : null
   const equipped = Object.keys(props.build.slots).length
 
-  // a two-handed weapon also takes the off-hand (visual only; the engine discards the piece)
-  const weaponEntry = props.build.slots.weapon
-  const weapon = weaponEntry ? byId.get(weaponEntry.id) : undefined
-  const twoHanded = weapon?.twoHanded ? weapon : undefined
+  // slots taken by another piece (visual only; the engine discards what sits under them)
+  const locks = lockedSlots(props.build, byId)
 
   const col = (ids: SlotId[]) => (
     <div className="eq-col">
       {ids.map((id) => (
-        <Slot key={id} id={id} {...props} lockedBy={id === 'offhand' ? twoHanded : undefined} />
+        <Slot key={id} id={id} {...props} lock={locks[id]} />
       ))}
     </div>
   )

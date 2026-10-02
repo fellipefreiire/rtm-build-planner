@@ -101,3 +101,16 @@ describe('Magic damage from gear', () => {
     expect(find('Fallen Angel Muffler').mods.some((m) => m.key === 'magic_dmg' && m.scope?.element === 'dark')).toBe(true)
   })
 })
+
+describe('Multi-position headgear', () => {
+  it('Crown of Deceit (upper + mid) in mid makes the upper piece not count', () => {
+    const b = trickster()
+    b.slots.upper = { id: find('Forest Guide').id, refine: 0, cards: [] }
+    const without = sheet(b)
+    b.slots.mid = { id: find('Crown of Deceit').id, refine: 0, cards: [] }
+    const s = sheet(b)
+    expect(s.skipped.map((x) => x.itemName)).toContain('Forest Guide')
+    expect(s.skipped.map((x) => x.itemName)).not.toContain('Crown of Deceit')
+    expect(s.matk.v).not.toBe(without.matk.v)
+  })
+})

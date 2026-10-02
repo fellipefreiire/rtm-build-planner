@@ -177,6 +177,12 @@ function main() {
       // gems go up to +10 in-game, but the dump says refine=0 [player report 2026-09-28]
       refinable: ov.refinable ?? (it.cat === 'Class Gem' ? true : isRefinable(it)),
       twoHanded: asArray(it.loc).includes('Weapon (two-handed)'),
+      // headgear listed in several positions takes all of them at once (Crown of Deceit: upper + mid).
+      // Cards with several locs only fit any of them, so they are left out
+      ...(() => {
+        const heads = [...new Set(asArray(it.loc).map((l) => SLOT[l]).filter((s) => s === 'upper' || s === 'mid' || s === 'lower'))]
+        return !isCard && it.grp !== 'Costume' && heads.length > 1 ? { occupies: heads } : {}
+      })(),
       // weapon level (new column in the 2026-09-28 dump): determines refine ATK
       wlv: it.wlv || 0,
       // only dropped items (from mobs or coffers) roll random options; NPC, quest and trade items do not [player report 2026-09-28]
