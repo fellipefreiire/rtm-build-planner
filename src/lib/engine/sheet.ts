@@ -498,6 +498,10 @@ export function computeSheet(
   // ATK +1 per 20 FLEE on top of it (item_combo_db: bBaseAtk,readparam(bFlee)/20)
   const fleeTotal = Math.floor((bFlee + pSum('flee') + flat('flee')) * (1 + pct('flee') / 100))
   const atkFromFlee = flat('atk_per_flee_20') ? Math.floor(fleeTotal / 20) * flat('atk_per_flee_20') : 0
+  // Mirage Gem: "Delta Skyfall Damage +1% per 10 flee" goes into that skill's damage bonus (total FLEE)
+  for (const [sk, v] of Object.entries(totals.scoped.skill_dmg_per_10_flee ?? {})) {
+    ;(totals.scoped.skill_dmg ??= {})[sk] = (totals.scoped.skill_dmg[sk] ?? 0) + Math.floor(fleeTotal / 10) * v
+  }
   const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk') + atkFromDef + atkFromFlee) * (1 + pct('atk') / 100)
   // Heir to the King: "Adds DEF equal to 10% of your total ATK" — total read as the status window's
   // left + right ATK (and MATK) [estimated: the text does not say which total]
@@ -594,7 +598,8 @@ export function computeSheet(
     skillPct: skillPct ? { ...skillPct, prov: rules.calibrated ? skillPct.prov : prov } : null,
     skillParts,
     skillName: skill ? skill.name.toLowerCase() : null,
-    canCrit: skill?.damage?.canCrit ?? true,
+    // a skill that does not crit can be made to by an item (Mirage Gem: "Delta Skyfall can crit.")
+    canCrit: (skill?.damage?.canCrit ?? true) || !!(skill && totals.scoped.skill_can_crit?.[skill.name.toLowerCase()]),
     magic: !!skill?.damage?.magic,
     // skillrange_by_distance does not include players (conf/battle/skill.conf: 14), so the skill's range decides;
     // Devil Raid (range 9) measured in-game 2026-09-30 without the build's Melee +15%

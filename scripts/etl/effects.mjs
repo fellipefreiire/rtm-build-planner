@@ -23,6 +23,8 @@ export const MOD_KEYS = new Set([
   'resist_size', 'dmg_reduction',
   // 2026-10-02: Maiden of Time set "ATK +1 every 20 flee" (combo: bonus bBaseAtk,readparam(bFlee)/20)
   'atk_per_flee_20',
+  // 2026-10-02: Mirage Gem of Avoidance ("Delta Skyfall can crit.", "Delta Skyfall Damage +1% per 10 flee")
+  'skill_can_crit', 'skill_dmg_per_10_flee',
   // 2026-09-30: End of Kings ("Adds ATK equal to 10% of your total DEF", "Soft DEF +1%") and the
   // MaxHP ceiling that Valhalla Knight Card / Heimdall's Legacy raise
   'atk_from_def', 'matk_from_mdef', 'soft_def', 'hp_limit',
@@ -185,6 +187,8 @@ const RE = {
 }
 
 const SKILL_SUFFIX = [
+  [/\s+crit\s+enable$/i, 'skill_can_crit'],
+  [/\s+dmg\s+per\s+10\s+flee$/i, 'skill_dmg_per_10_flee'],
   [/\s+cooldown\s+reduction$/i, 'skill_cooldown'],
   [/\s+(?:dmg|damage)$/i, 'skill_dmg'],
   [/\s+sp\s+cost$/i, 'skill_sp_cost'],

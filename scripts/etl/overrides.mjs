@@ -83,6 +83,17 @@ export const ITEM_OVERRIDES = {
     desc: [['ATK +1 every 20 flee', 'ATK Per 20 Flee +1']],
     why: 'Maiden of Time set "ATK +1 every 20 flee" rewritten in the parser format (server combo: bBaseAtk + FLEE/20) [db]',
   }])),
+  'Mirage Gem of Avoidance': {
+    desc: [
+      ['Delta Skyfall can crit.', 'Delta Skyfall Crit Enable +1'],
+      ['Delta Skyfall Damage +1% per 10 flee', 'Delta Skyfall DMG Per 10 Flee +1%'],
+      ['Wind Slash Damage +2% per 10 flee', 'Wind Slash DMG Per 10 Flee +2%'],
+    ],
+    // the site lists Kingslayer only; a Phantom Thief wears it in the live game (player report 2026-10-02:
+    // equipment + status window of a Phantom Thief hitting 35k Delta crits)
+    jobsAdd: ['Phantom Thief'],
+    why: 'crit and per-FLEE lines rewritten for the parser; Phantom Thief added [player report 2026-10-02]',
+  },
   'Ingwaz Rune of Potential': {
     desc: [['ATK +5 / MATK +5', 'ATK +5\nMATK +5']],
     // the site lists "Unchained Classes" (the three 2nd jobs); the server script is Assassin/Crusader/Rogue with
