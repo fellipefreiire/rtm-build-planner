@@ -27,8 +27,15 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
   // after "K" never showed up without a search); now it grows 100 at a time
   const [limit, setLimit] = useState(60)
   const all = useMemo(() => {
+    // each word anywhere in the name, or the whole text ignoring spaces: "god sla", "godsla", "slayer shoes"
     const needle = q.trim().toLowerCase()
-    const base = needle ? pool.filter((i) => i.name.toLowerCase().includes(needle)) : pool
+    const words = needle.split(/\s+/).filter(Boolean)
+    const glued = needle.replace(/\s+/g, '')
+    const hit = (name: string) => {
+      const n = name.toLowerCase()
+      return words.every((w) => n.includes(w)) || n.replace(/\s+/g, '').includes(glued)
+    }
+    const base = needle ? pool.filter((i) => hit(i.name)) : pool
     return [...base].sort((a, b) => a.cat.localeCompare(b.cat) || a.name.localeCompare(b.name))
   }, [pool, q])
   const list = all.slice(0, limit)
@@ -109,7 +116,7 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
       </div>
       <small>
         {pool.length} {isCard ? 'cards' : `items ${cls} can equip`} in this slot · showing {list.length}, by type and name
-        {list.length < pool.length && ' · use the search for the rest'}
+        {list.length < all.length && ' · "show more" at the end of the list'}
       </small>
     </>
   )
