@@ -99,3 +99,16 @@ describe('2026-10-02: server damage layers', () => {
     expect(sim(b, {}, 'phantom-thief/sonic-blow').s.weaponWarning).toMatch(/katar/i)
   })
 })
+
+describe('Maiden of Time set (2026-10-02)', () => {
+  it('"Total Flee +N%" multiplies FLEE; the set adds ATK +1 per 20 FLEE', () => {
+    const bare = build('Phantom Thief', [['armor', 'Power Dragon Plate', 0], ['garment', 'Volcano Manteau', 0], ['shoes', 'Temporal AGI Boots', 0]])
+    const withSet = JSON.parse(JSON.stringify(bare)) as Build
+    withSet.slots.armor!.cards = [find('Maiden of Past Card').id]
+    withSet.slots.garment!.cards = [find('Maiden of Present Card').id]
+    withSet.slots.shoes!.cards = [find('Maiden of Future Card').id]
+    const a = sheet(bare), b = sheet(withSet)
+    expect(b.flee.v).toBe(Math.floor(a.flee.v * 1.16))   // +6% +5% +5%
+    expect(b.atk.from.join(' ')).toContain(`${Math.floor(b.flee.v / 20)} from FLEE`)
+  })
+})

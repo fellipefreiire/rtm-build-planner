@@ -490,11 +490,15 @@ export function computeSheet(
   const wEq = equipped.find((e) => e.slot === 'weapon')
   const refineAtk = Math.floor((wEq?.item.wlv ?? 0) * 50 * (wEq?.refine ?? 0) / 100)
   // in-game window: left = status ATK; right = weapon + refine + gear ATK (without mastery)
-  const shownGear = weaponAtk + refineAtk + flat('atk') + atkFromDef
+  const shownGear = weaponAtk + refineAtk + flat('atk') + atkFromDef + (flat('atk_per_flee_20') ? Math.floor(Math.floor((bFlee + pSum('flee') + flat('flee')) * (1 + pct('flee') / 100)) / 20) * flat('atk_per_flee_20') : 0)
   // damage: status ATK counts 2× (battle_calc_status_attack); the weapon gains ATK × STR/200
   // (base_stat_bonus, without the variance, which is symmetric); mastery adds without element
   const weaponPart = weaponAtk * (1 + stats.str / 200) + refineAtk
-  const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk') + atkFromDef) * (1 + pct('atk') / 100)
+  // "Total Flee +N%" is a rate on the whole FLEE (bFleeRate), not +N flat; the Maiden of Time set adds
+  // ATK +1 per 20 FLEE on top of it (item_combo_db: bBaseAtk,readparam(bFlee)/20)
+  const fleeTotal = Math.floor((bFlee + pSum('flee') + flat('flee')) * (1 + pct('flee') / 100))
+  const atkFromFlee = flat('atk_per_flee_20') ? Math.floor(fleeTotal / 20) * flat('atk_per_flee_20') : 0
+  const atkRaw = (2 * sAtk + weaponPart + mastery + flat('atk') + atkFromDef + atkFromFlee) * (1 + pct('atk') / 100)
   // Heir to the King: "Adds DEF equal to 10% of your total ATK" — total read as the status window's
   // left + right ATK (and MATK) [estimated: the text does not say which total]
   const defFromAtk = Math.floor((sAtk + shownGear) * (pct('def_from_atk') + flat('def_from_atk')) / 100)
@@ -567,7 +571,7 @@ export function computeSheet(
     },
     totals,
     equipped,
-    atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', `${pct('atk')}%`),
+    atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', atkFromFlee ? `${atkFromFlee} from FLEE (Maiden of Time)` : '', `${pct('atk')}%`),
     matk: qty((sMatk + weaponMatk + refineAtk + flat('matk') + matkFromMdef) * (1 + pct('matk') / 100), 'emu', `status MATK ${sMatk}`, `weapon ${weaponMatk} + refine ${refineAtk}`, `gear ${flat('matk')}`, matkFromMdef ? `${matkFromMdef} from MDEF` : '', `${pct('matk')}%`),
     def: qty(defTotal + defFromAtk, 'derived', 'gear DEF + mods', defFromAtk ? `${defFromAtk} from ATK (Heir to the King)` : ''),
     mdef: qty(mdefTotal + mdefFromMatk, 'derived', 'gear MDEF + mods', mdefFromMatk ? `${mdefFromMatk} from MATK (Heir to the King)` : ''),
@@ -575,7 +579,7 @@ export function computeSheet(
     maxSp: sp ? qty(sp.v, 'emu', sp.why) : null,
     critRate: qty(critTotal, 'emu', `base ${bCrit} (LUK) [emu]`, `gear ${gearCrit}`, critMult !== 100 ? `× ${critMult}% (Total Critical Rate)` : '', pWhy('crit')),
     hit: qty(bHitT + flat('hit') + pct('hit'), 'emu', `base ${bHit} [emu]`, pWhy('hit'), `gear ${flat('hit') + pct('hit')}`),
-    flee: qty(bFleeT + flat('flee') + pct('flee'), 'emu', `base ${bFlee} [emu]`, pWhy('flee'), `gear ${flat('flee') + pct('flee')}`),
+    flee: qty(fleeTotal, 'emu', `base ${bFlee} [emu]`, pWhy('flee'), `gear ${flat('flee')}`, pct('flee') ? `× ${100 + pct('flee')}% Total Flee` : ''),
     critDmg: qty(pct('crit_dmg') + flat('crit_dmg'), 'db', 'Critical Damage'),
     perfectDodge: qty(bPdT + gearPd, 'emu', `base ${bPd} (LUK+AGI) [emu]`, pWhy('pd'), `gear ${gearPd}`),
     aspd: asp.v != null ? qty(asp.v, 'emu', asp.why) : null,
@@ -625,9 +629,9 @@ export function computeSheet(
         why: `HIT = lv + 2×DEX + LUK/5 + 175 [emu] ${pWhy('hit')} · gear ${flat('hit') + pct('hit')} ${inn?.hit ? `· +${inn.hit} from class [measured naked 2026-09-27]` : ''}`,
       },
       flee: {
-        base: bFleeT + flat('flee') + pct('flee'),
+        base: fleeTotal,
         gear: Math.floor(bPdT + gearPd), // the window truncates: flee2/10 (clif.cpp:3517)
-        why: `FLEE = lv + AGI + AGI/10 + LUK/5 + 100 [emu] ${pWhy('flee')} · gear ${flat('flee') + pct('flee')} · on the right, perfect dodge (LUK+AGI+10)/10 + ${gearPd} from gear`,
+        why: `FLEE = lv + AGI + AGI/10 + LUK/5 + 100 [emu] ${pWhy('flee')} · gear ${flat('flee')}${pct('flee') ? ` × ${100 + pct('flee')}%` : ''} · on the right, perfect dodge (LUK+AGI+10)/10 + ${gearPd} from gear`,
       },
       crit: {
         base: Math.floor(critTotal), // the window truncates: cri/10

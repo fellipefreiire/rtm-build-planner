@@ -79,6 +79,10 @@ export const ITEM_OVERRIDES = {
     desc: [["On kill, 0.05% chance\nper total set refine\nto activate\nMorroc's Mark for 30\nseconds.", "On kill, 0.05% chance per total set refine to activate Morroc's Mark for 30 seconds."]],
     why: 'the wrapped "per total set refine" was glued to the line above and made "All Stats +4" scale with the set refine; it belongs to the Morroc\'s Mark proc [db]',
   }])),
+  ...Object.fromEntries(['Past', 'Present', 'Future'].map((t) => [`Maiden of ${t} Card`, {
+    desc: [['ATK +1 every 20 flee', 'ATK Per 20 Flee +1']],
+    why: 'Maiden of Time set "ATK +1 every 20 flee" rewritten in the parser format (server combo: bBaseAtk + FLEE/20) [db]',
+  }])),
   Edge: {
     desc: [['If Refine is +7 or higher:\nDouble Effect', 'If Refine is +7 or higher:\nDelta Skyfall Cooldown -0.5s\nDelta Skyfall DMG+20%\nHP+2%']],
     // the Defense Penetration sits above a blank line, apart from the block being doubled: left single [estimated]

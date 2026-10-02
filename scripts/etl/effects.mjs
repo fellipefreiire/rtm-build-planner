@@ -21,6 +21,8 @@ export const MOD_KEYS = new Set([
   // 2026-09-29: "Resistance vs All Sizes" used to land in resist_race; "Damage Reduction +5%"
   // is the opposite sign of "Damage taken -5%", so it gets its own key (positive = less damage)
   'resist_size', 'dmg_reduction',
+  // 2026-10-02: Maiden of Time set "ATK +1 every 20 flee" (combo: bonus bBaseAtk,readparam(bFlee)/20)
+  'atk_per_flee_20',
   // 2026-09-30: End of Kings ("Adds ATK equal to 10% of your total DEF", "Soft DEF +1%") and the
   // MaxHP ceiling that Valhalla Knight Card / Heimdall's Legacy raise
   'atk_from_def', 'matk_from_mdef', 'soft_def', 'hp_limit',
@@ -70,6 +72,7 @@ const ALIAS = new Map(Object.entries({
   'all cast time': ['cast_time'], 'sp consumption': ['sp_cost'],
   'max hp/sp': ['hp', 'sp'], 'hp/sp bonus': ['hp', 'sp'],
   'double attack rate': ['double_attack_rate'], 'auto guard': ['auto_guard'],
+  'atk per 20 flee': ['atk_per_flee_20'],
   'magic defense penetration': ['mdef_pen'],
   'reflect melee damage': ['reflect_melee'], 'exp received': ['exp'],
   'fixed cast': ['fixed_cast'], 'fixed cast time': ['fixed_cast'],
