@@ -1,7 +1,7 @@
 // suggest: scans the class catalog and measures the real gain by recomputing the build.
 // No pool heuristic — the order "empty pool > ATK% > skill% > crit" falls out
 // of the recomputation on its own.
-import { Build, Item, Mob, Skill, SLOTS, SlotId } from '@/lib/types'
+import { Build, Item, Mob, Skill, SLOTS, SlotId, accessorySideOk } from '@/lib/types'
 import { ClassRules } from '@/lib/rules/classes'
 import { canEquip } from '@/lib/data'
 import { computeSheet } from './sheet'
@@ -49,7 +49,7 @@ export function suggest(build: Build, d: SuggestDeps, maxPerSlot = 3): Suggestio
 
     // --- item swap ---
     const cands = d.items.filter(
-      (it) => it.grp !== 'Card' && it.slots.includes(s.from) && canEquip(it, build.cls) && it.id !== current?.id,
+      (it) => it.grp !== 'Card' && it.slots.includes(s.from) && accessorySideOk(it.cat, s.id) && canEquip(it, build.cls) && it.id !== current?.id,
     )
     const scored: Suggestion[] = []
     for (const it of cands) {

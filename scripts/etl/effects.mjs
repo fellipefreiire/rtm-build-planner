@@ -308,9 +308,27 @@ function unwrap(rawLines) {
     // and two effects glued with no break: "Leech Power +10%Perfect Dodge +5"
     // and two sentences: "ATK -2. MATK -2."
     const parts = joined.flatMap((x) => x.replace(GLUED, '$1\n').replace(/(\d%?)\.\s+(?=[A-Z])/g, '$1\n').split('\n'))
-    for (const part of parts) out.push({ text: part, line: i })
+    for (const part of parts.flatMap(everyBase)) out.push({ text: part, line: i })
   }
   return out
+}
+
+// 2026-10-02: "Every 9 base STR gives you 1 extra STR" (Megingjard and the other Asgard accessories),
+// "Every 9 base AGI gives you 2 extra flat DEF and 1 Perfect Dodge" (Backwak), "Every 10 base INT increases ATK by 1"
+// (Vine Willow Card) rewritten in the "X +n per N base S" form the parser already understands
+const STAT_WORD = '(str|agi|vit|int|dex|luk)'
+function everyBase(t) {
+  let m = new RegExp(`^every\\s+(\\d+)\\s+base\\s+${STAT_WORD}\\s+gives\\s+you\\s+(.+?)\\.?$`, 'i').exec(t)
+  if (m) {
+    const [, n, stat, rest] = m
+    return rest.split(/\s+and\s+/i).map((x) => {
+      const g = /^(\d+)\s+(?:extra\s+)?(?:flat\s+)?(.+)$/i.exec(x.trim())
+      return g ? `${g[2].replace(/^extra\s+/i, '')} +${g[1]} per ${n} base ${stat}` : x
+    })
+  }
+  m = new RegExp(`^every\\s+(\\d+)\\s+base\\s+${STAT_WORD}\\s+increases\\s+(.+?)\\s+by\\s+(\\d+)\\.?$`, 'i').exec(t)
+  if (m) return [`${m[3]} +${m[4]} per ${m[1]} base ${m[2]}`]
+  return [t]
 }
 
 /**

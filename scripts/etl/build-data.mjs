@@ -189,6 +189,8 @@ function main() {
       dropped: (Array.isArray(it.src) && it.src.length > 0) || (Array.isArray(it.box) && it.box.length > 0),
       // accepts Dream Enchants at the Weaver of Dreams ("Dream Enchants [and Refining] available")
       dreamEnchant: /Dream Enchants (and Refining )?available/i.test(String(it.desc || '')),
+      // Shadow sets whose bonus is a "Touch of …" (Bulwark Pact, Dragon Ward…): Phantom Thief still needs every piece
+      ...(it.grp === 'Shadow gear' && /^Grants Touch of/im.test(String(it.desc || '')) ? { touchSet: true } : {}),
       // element granted by the item: weapon endow and armor element (null = unchanged)
       ...(() => { const e = elementsOf(desc, slots); return { endow: e.endow, armorEl: e.armorEl } })(),
       // gems carry their class in the new `cls` column, with `jobs` empty
@@ -274,6 +276,8 @@ function main() {
   }))
 
   // ---------- skills ----------
+  const MAGIC_SPELLS = new Set(['WL_COMET', 'WZ_WATERBALL', 'WZ_VERMILION', 'GN_DEMONIC_FIRE', 'NJ_BAKUENRYU',
+    'SO_FIREWALK', 'MG_NAPALMBEAT', 'SO_VARETYR_SPEAR'])
   // All skills, not just damage skills: the tree needs passives and
   // prerequisites for the point totals to add up.
   const rawSkills = dump.load('raw-db-skills.json')
@@ -286,6 +290,11 @@ function main() {
       desc = String(desc).replace(from, to)
     }
     const f = parseSkillFormula(desc)
+    // 2026-10-02: classic spells the parser read as physical ("Weapon-Based elemental damage" in Comet's text);
+    // magic both in the emulator's skill_db (Type: Magic) and in the site's magic group (kind 2)
+    if (f && MAGIC_SPELLS.has(s.icon)) f.magic = true
+    // Soul Destroyer adds a second part: 50 + rnd(50) + 5 × level × INT, no element, no DEF (battle.cpp ASC_BREAKER) [emu]
+    if (f && s.icon === 'ASC_BREAKER') f.miscPart = { base: 75, perLvInt: 5 }
     const type = TYPES[s.type] ?? null
     skillsOut.push({
       key: s.key,
@@ -303,6 +312,7 @@ function main() {
       prose: (s.desc || s.prose || '').trim(),
       /** range in cells per level; range >= 4 makes a skill a ranged attack (battle.cpp battle_range_type) */
       range: Array.isArray(s.range) ? s.range : s.range != null ? [s.range] : null,
+      weapons: Array.isArray(s.wep) && s.wep.length ? s.wep : null,
       damage: f,
     })
   }

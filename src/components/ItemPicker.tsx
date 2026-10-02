@@ -19,8 +19,8 @@ export default function ItemPicker({ cls, target, currentId, onChoose }: Props) 
 
   // always filtered by class — no reason to offer gear the class cannot use
   const pool: Item[] = useMemo(
-    () => (isCard ? cardsForSlot(slot.from) : itemsForSlot(slot.from, cls, true)),
-    [isCard, slot.from, cls],
+    () => (isCard ? cardsForSlot(slot.from) : itemsForSlot(slot.from, cls, true, slot.id)),
+    [isCard, slot.from, slot.id, cls],
   )
 
   const list = useMemo(() => {

@@ -33,7 +33,7 @@ export type ClassRules = {
   /** buffs only the Simulator turns on (the Planner shows unbuffed status) */
   simBuffs: Toggle[]
   /** mods from active buffs, added before stats (skills and BASE stats for buffs that scale) */
-  buffMods: (toggles: Record<string, boolean>, c?: { skills: Record<string, number>; stats: Record<StatKey, number> }) => BuffMod[]
+  buffMods: (toggles: Record<string, boolean>, c?: { skills: Record<string, number>; stats: Record<StatKey, number>; baseLv?: number }) => BuffMod[]
   /** percentage points added to the skill %, beyond what the dump declares */
   skillPctExtra: (c: RuleCtx) => Extra[]
   /** absorb shield, if the class has one */
@@ -42,6 +42,12 @@ export type ClassRules = {
   passives: (c: PassiveCtx) => Partial<Record<PassiveKey, Extra[]>>
   /** bonuses the class has with no items and no skills allocated in the planner (measured) */
   innate: { hpRate: number; hit: number; pd: number; why: string } | null
+  /** weapon endows the class can cast (Seven Winds, Enchant Poison); the Simulator picks the best vs the target */
+  endows?: (toggles: Record<string, boolean>, skills: Record<string, number>) => { el: string; label: string }[]
+  /** % extra damage of an attack element on the target (Venom Mark: Poison) */
+  elementBonus?: (toggles: Record<string, boolean>, skills: Record<string, number>) => Record<string, number>
+  /** class rules for Shadow gear: extra refine per piece and sets that activate with a single piece */
+  shadow?: { refineBonus: number; singlePieceSets: boolean; why: string }
 }
 
 export type PassiveKey = 'atk' | 'crit' | 'flee' | 'hit' | 'pd'
@@ -212,7 +218,96 @@ const DARK_KNIGHT: ClassRules = {
   },
 }
 
-const TABLE: Record<string, ClassRules> = { Revenant: REVENANT, Trickster: TRICKSTER, 'Dark Knight': DARK_KNIGHT }
+// Thief line (Unchained Thief, Phantom Thief): not calibrated. Passives from the skill texts [db].
+const thiefPassives = (c: PassiveCtx) => {
+  const blade = c.weaponType === 'Dagger' || c.weaponType === '1hSword'
+  return {
+    atk: blade ? perLv(c, 'unchained-thief/blade-mastery', 3, 'Blade Mastery', '3 ATK per level with a sword or dagger') : [],
+    flee: [
+      ...perLv(c, 'thief/improve-dodge', 4, 'Improve Dodge', '4 FLEE per level'),
+      ...perLv(c, 'unchained-thief/shadow-mastery', 3, 'Shadow Mastery', '3 FLEE per level'),
+    ],
+  }
+}
+// "Bonus is 1 HP per skill level, per Base Level" and "2 SP per skill level, per 3 Base Levels" [db]; ASPD +1%/level from
+// Shadow Mastery (any weapon). Blade Mastery's ASPD +1%/level needs the weapon type, which buffMods does not see: not modeled
+const thiefBuffMods: ClassRules['buffMods'] = (_t, c) => {
+  if (!c) return []
+  const lv = (k: string) => c.skills[k] ?? 0
+  const base = c.baseLv ?? 0
+  const out: BuffMod[] = []
+  if (lv('thief/improve-defense')) out.push({ key: 'hp', value: lv('thief/improve-defense') * base, pct: false, label: 'Improve Defense' })
+  if (lv('thief/improve-wisdom')) out.push({ key: 'sp', value: 2 * lv('thief/improve-wisdom') * Math.floor(base / 3), pct: false, label: 'Improve Wisdom' })
+  if (lv('unchained-thief/shadow-mastery')) out.push({ key: 'aspd', value: lv('unchained-thief/shadow-mastery'), pct: true, label: 'Shadow Mastery' })
+  return out
+}
+// Thief line buffs (texts of today) [db]
+const SEVEN_WINDS = ['Earth', 'Wind', 'Water', 'Fire', 'Ghost', 'Dark', 'Holy']   // Lv1..Lv7
+const THIEF_LINE_BUFFS: Toggle[] = [
+  { id: 'enchantPoison', skill: 'thief/enchant-poison', label: 'Enchant Poison', default: false, why: 'Endow Poison ("all physical attacks become poison element"). The Simulator only uses it when Poison is the best element vs the target. [db]' },
+  { id: 'fury', skill: 'unchained-thief/fury', label: 'Fury', default: false, why: 'CRIT +1/level (doubled with Katars); Sonic Blow and Impact Tooth base damage +50%. Needs a Shadow Orb. [db]' },
+  { id: 'cloaking', skill: 'unchained-thief/cloaking', label: 'Cloaking', default: false, why: 'CRIT +3/level while cloaked. [db]' },
+  { id: 'morrocsMark', skill: 'orphan/morroc-s-mark', label: "Morroc's Mark", default: false, why: 'All Stats +10% for 10 s (read as 10% of the base stats) [estimated]; 60 min cooldown (Unbound Gem cuts it). [db]' },
+]
+const thiefLineMods = (t: Record<string, boolean>, c?: { skills: Record<string, number>; stats: Record<StatKey, number> }): BuffMod[] => {
+  if (!c) return []
+  const lv = (k: string) => c.skills[k] ?? 0
+  const out: BuffMod[] = []
+  if (t.fury && lv('unchained-thief/fury')) {
+    out.push({ key: 'crit_rate', value: lv('unchained-thief/fury'), pct: false, label: 'Fury' })
+    for (const sk of ['sonic blow', 'impact tooth']) out.push({ key: 'skill_dmg:' + sk, value: 50, pct: true, label: 'Fury' })
+  }
+  if (t.cloaking && lv('unchained-thief/cloaking')) out.push({ key: 'crit_rate', value: 3 * lv('unchained-thief/cloaking'), pct: false, label: 'Cloaking' })
+  if (t.morrocsMark && lv('orphan/morroc-s-mark')) {
+    for (const st of ['str', 'agi', 'vit', 'int', 'dex', 'luk'] as StatKey[]) out.push({ key: st, value: Math.floor(c.stats[st] * 0.1), pct: false, label: "Morroc's Mark" })
+  }
+  return out
+}
+const thiefEndows: NonNullable<ClassRules['endows']> = (t, skills) => {
+  const out: { el: string; label: string }[] = []
+  const sw = skills['phantom-thief/seven-winds'] ?? 0
+  if (t.sevenWinds && sw) SEVEN_WINDS.slice(0, sw).forEach((el, i) => out.push({ el, label: `Seven Winds Lv${i + 1}` }))
+  if (t.enchantPoison && (skills['thief/enchant-poison'] ?? 0)) out.push({ el: 'Poison', label: 'Enchant Poison' })
+  return out
+}
+const UNCHAINED_THIEF: ClassRules = {
+  ...GENERIC('Unchained Thief'), passives: thiefPassives,
+  simBuffs: THIEF_LINE_BUFFS,
+  buffMods: (t, c) => [...thiefBuffMods(t, c), ...thiefLineMods(t, c)],
+  endows: thiefEndows,
+}
+const PHANTOM_THIEF: ClassRules = {
+  ...UNCHAINED_THIEF,
+  name: 'Phantom Thief',
+  simBuffs: [
+    { id: 'readyToRip', skill: 'phantom-thief/ready-to-rip', label: 'Ready to Rip', default: true, why: 'Lv N: HIT +10×N, ATK +(1+N)%, DEF −(5+5N)%. 50 s / CD 2 min. ATK fixed in Patch 15. [db]' },
+    { id: 'sevenWinds', skill: 'phantom-thief/seven-winds', label: 'Seven Winds', default: true, why: 'Weapon endow: Lv1 Earth, 2 Wind, 3 Water, 4 Fire, 5 Ghost, 6 Dark, 7 Holy. The Simulator uses the best element vs the target (up to the learned level); only when no item grants an element. [db]' },
+    { id: 'venomMark', skill: 'phantom-thief/venom-mark', label: 'Venom Mark', default: false, why: 'Target takes +5%/level from Poison attacks (with Enchant Poison). [db]' },
+    ...THIEF_LINE_BUFFS,
+  ],
+  endows: thiefEndows,
+  elementBonus: (t, skills): Record<string, number> => (t.venomMark && skills['phantom-thief/venom-mark'] ? { Poison: 5 * skills['phantom-thief/venom-mark'] } : {}),
+  buffMods: (t, c) => {
+    const out = [...thiefBuffMods(t, c), ...thiefLineMods(t, c)]
+    const lv = c?.skills['phantom-thief/ready-to-rip'] ?? 0
+    if (t.readyToRip && lv) {
+      out.push(
+        { key: 'atk', value: 1 + lv, pct: true, label: 'Ready to Rip' },
+        { key: 'hit', value: 10 * lv, pct: false, label: 'Ready to Rip' },
+        { key: 'def', value: -(5 + 5 * lv), pct: true, label: 'Ready to Rip' },
+      )
+    }
+    return out
+  },
+  // Master Thief Arts: "Shadow Set pieces count as +3 refine for their bonuses. Shadow Set bonuses activate with a
+  // single piece equipped (the Touch sets still need all 4 pieces)." [db] — +3 read as added to the piece's refine [estimated]
+  shadow: { refineBonus: 3, singlePieceSets: true, why: 'Master Thief Arts: Shadow pieces +3 refine; a set bonus activates with 1 piece, except Touch sets [db]' },
+}
+
+const TABLE: Record<string, ClassRules> = {
+  Revenant: REVENANT, Trickster: TRICKSTER, 'Dark Knight': DARK_KNIGHT,
+  'Unchained Thief': UNCHAINED_THIEF, 'Phantom Thief': PHANTOM_THIEF,
+}
 
 export const rulesFor = (cls: string): ClassRules => TABLE[cls] ?? GENERIC(cls)
 

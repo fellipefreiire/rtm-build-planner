@@ -30,15 +30,23 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   const notes: string[] = []
   const sc = sheet.totals.scoped
 
-  const pools =
-    (sc.dmg_vs_race?.[lower(mob.race)] ?? 0) +
-    (sc.dmg_vs_size?.[lower(mob.size)] ?? 0) +
-    (sc.dmg_vs_element?.[lower(mob.element)] ?? 0) +
-    (mob.mvp ? (sheet.totals.pct.dmg_vs_boss ?? 0) : (sheet.totals.pct.dmg_vs_nonboss ?? 0)) +
-    // "Damage +N%" without a target (Heir Boots/Pendant "vs all sizes/elements") applies against anything
-    (sheet.totals.pct.dmg_pct ?? 0)
+  // 2026-10-02: each category multiplies on its own (battle.cpp battle_calc_cardfix: race, then element, then size,
+  // then class); within a category bonuses add. Measured on the local server: vs Large 13% and vs non-boss 13% gave
+  // ×1.277, not ×1.26 [emu, rig 2026-10-02]
+  const poolRace = sc.dmg_vs_race?.[lower(mob.race)] ?? 0
+  const poolSize = sc.dmg_vs_size?.[lower(mob.size)] ?? 0
+  const poolEle = sc.dmg_vs_element?.[lower(mob.element)] ?? 0
+  const poolClass = mob.mvp ? (sheet.totals.pct.dmg_vs_boss ?? 0) : (sheet.totals.pct.dmg_vs_nonboss ?? 0)
+  // "Damage +N%" without a target (Heir Boots/Pendant "vs all sizes/elements") applies against anything
+  const poolAny = sheet.totals.pct.dmg_pct ?? 0
+  const poolMult = [poolRace, poolSize, poolEle, poolClass, poolAny].reduce((a, v) => a * (1 + v / 100), 1)
+  const pools = (poolMult - 1) * 100
 
-  const elemAtk = elementMultiplier(sheet.weaponElement.v, mob.element, mob.elv)
+  // Seven Winds / Enchant Poison: the best endow vs this target (Venom Mark boosts Poison)
+  let elem = { v: sheet.weaponElement.v, from: sheet.weaponElement.from }
+  const elMult = (el: string) => elementMultiplier(el, mob.element, mob.elv) * (1 + (sheet.elementBonus[el] ?? 0) / 100)
+  for (const c of sheet.endowChoices) if (elMult(c.el) > elMult(elem.v)) elem = { v: c.el, from: c.label }
+  const elemAtk = elMult(elem.v)
   const penEff = penEffect(sheet.defPen.v)
   const mobDefLeft = mob.def * (1 - penEff)
   const defCut = defMultiplier(mobDefLeft)
@@ -69,23 +77,26 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
     { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${sheet.weaponElement.v} magic damage` },
     { label: 'target MDEF', mult: mdefCut, why: `MDEF ${mob.mdef}: (1000 + MDEF) / (1000 + 10 × MDEF), soft MDEF ignored [emu, simplified]` },
-    { label: 'skill element', mult: elemAtk, why: `${sheet.weaponElement.v} (${sheet.weaponElement.from}) vs ${mob.element} ${mob.elv}` },
+    { label: 'skill element', mult: elemAtk, why: `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
   ] : [
     { label: 'ATK', mult: sheet.atk.v, why: sheet.atk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
     { label: ranged ? 'ranged' : 'melee', mult: 1 + melee / 100, why: ranged ? `${melee}% ranged damage (skill range ≥ 4: melee bonuses do not apply)` : `${melee}% melee damage` },
     { label: 'critical', mult: critAvg, why: `${(critChance * 100).toFixed(0)}% chance (${sheet.critRate.v >= CRIT_CAP ? `crit ${sheet.critRate.v.toFixed(1)} ≥ ${CRIT_CAP}: always` : `crit ${sheet.critRate.v.toFixed(1)} − target LUK ${mobLuk}/5`}) × (1.4 + ${sheet.critDmg.v}% crit damage)` },
-    { label: 'race/size/element pools', mult: 1 + pools / 100, why: `${pools}% vs ${mob.race} ${mob.size} ${mob.element}` },
+    { label: 'race/size/element pools', mult: poolMult, why: `race ${poolRace}% × size ${poolSize}% × element ${poolEle}% × ${mob.mvp ? 'boss' : 'non-boss'} ${poolClass}% × any ${poolAny}% vs ${mob.race} ${mob.size} ${mob.element} (each category multiplies)` },
     { label: 'target DEF after pen', mult: defCut.v, why: `DEF ${mob.def} − pen ${sheet.defPen.v} (${(penEff * 100).toFixed(0)}%) → ${mobDefLeft.toFixed(0)}` },
-    { label: 'weapon element', mult: elemAtk, why: `${sheet.weaponElement.v} (${sheet.weaponElement.from}) vs ${mob.element} ${mob.elv}` },
+    { label: 'weapon element', mult: elemAtk, why: `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
   ]
   // last multiplier of battle_calc_damage (battle.cpp:1832): most MVPs take 50% [emu]
   const mobTaken = mobDamageTaken(mob.id)
   if (mobTaken !== 100) {
     layers.push({ label: 'target damage taken', mult: mobTaken / 100, why: `${mob.name} takes ${mobTaken}% of the damage (DamageTaken, battle.cpp:1832) [emu ~2024]` })
   }
-  const index = layers.reduce((a, l) => a * l.mult, 1)
+  // Soul Destroyer's second part: added at the end, no element, no DEF
+  const index = layers.reduce((a, l) => a * l.mult, 1) + sheet.skillFlat
+  if (sheet.skillFlat) notes.push(`+${Math.round(sheet.skillFlat)} flat from the skill's second damage part (ignores element and DEF) [emu]`)
+  if (sheet.weaponWarning) notes.push(`${sheet.weaponWarning}: the equipped weapon cannot cast it`)
 
   let damage: Qty | null = null
   if (build.anchor && build.anchor.index > 0) {

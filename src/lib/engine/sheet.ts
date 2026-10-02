@@ -2,6 +2,7 @@
 import {
   Build, Item, Modifier, Prov, Qty, Skill, SlotId, SLOTS, StatKey, STATS,
   UnparsedEffect, qty, weakest,
+  accessorySideOk,
 } from '@/lib/types'
 import { ClassRules, Extra } from '@/lib/rules/classes'
 import {
@@ -68,6 +69,14 @@ export type StatSheet = {
   magic: boolean
   /** the chosen skill's attack range: range >= 4 cells is ranged (battle.cpp battle_range_type) [emu] */
   rangeType: 'melee' | 'ranged'
+  /** endows the Simulator may pick per target (Seven Winds, Enchant Poison); empty if an item grants the element */
+  endowChoices: { el: string; label: string }[]
+  /** % extra damage of an attack element on the target (Venom Mark) */
+  elementBonus: Record<string, number>
+  /** flat damage added after every multiplier (Soul Destroyer's second part) */
+  skillFlat: number
+  /** the skill needs a weapon the build does not wield (Sonic Blow without a Katar) */
+  weaponWarning: string | null
   skillParts: Extra[]
   /**
    * The same numbers as the in-game status window, split into `base + gear`.
@@ -147,6 +156,20 @@ export function lockedSlots(build: Build, byId: Map<number, Item>): Partial<Reco
   return out
 }
 
+// dump weapon names (skills `wep`) -> emulator weapon type (emuWeaponType)
+const SKILL_WEAPON: Record<string, string> = {
+  'one-handed axe': '1hAxe', 'two-handed axe': '2hAxe', katar: 'Katar', dagger: 'Dagger', 'one-handed sword': '1hSword',
+  'bare hands': 'Fist', 'two-handed sword': '2hSword', 'one-handed spear': '1hSpear', 'two-handed spear': '2hSpear',
+  mace: 'Mace', bow: 'Bow', knuckle: 'Knuckle', whip: 'Whip', book: 'Book', revolver: 'Revolver', 'huuma shuriken': 'Huuma',
+}
+function skillWeaponWarning(skill: Skill | null, wType: string): string | null {
+  const ws = skill?.weapons
+  if (!ws?.length) return null
+  const ok = ws.map((w) => SKILL_WEAPON[w]).filter(Boolean)
+  if (!ok.length || ok.includes(wType)) return null
+  return `${skill!.name} requires ${ws.join(' / ')}`
+}
+
 export function computeSheet(
   build: Build,
   byId: Map<number, Item>,
@@ -166,6 +189,11 @@ export function computeSheet(
     if (!e) continue
     const item = byId.get(e.id)
     if (!item) continue
+    // an accessory in the wrong hand does not equip in-game (Mark of a Survivor is right-only)
+    if (!accessorySideOk(item.cat, s.id)) {
+      skippedSlots.push({ raw: item.name, itemName: item.name, why: `${item.cat}: does not fit in ${s.label}` })
+      continue
+    }
     const lock = locked[s.id]
     if (lock) {
       skippedSlots.push({
@@ -180,7 +208,8 @@ export function computeSheet(
     equipped.push({
       slot: s.id,
       item,
-      refine: e.refine ?? 0,
+      // Phantom Thief: Shadow pieces count +N refine for their bonuses (rules.shadow)
+      refine: (e.refine ?? 0) + (s.id.startsWith('shadow') && rules.shadow ? rules.shadow.refineBonus : 0),
       cards: (e.cards ?? []).map((c) => byId.get(c)).filter(Boolean) as Item[],
     })
   }
@@ -192,6 +221,13 @@ export function computeSheet(
 
   // names of everything equipped (items and cards), to check for complete sets
   const wearing = new Set(equipped.flatMap((p) => [p.item.name, ...p.cards.map((c) => c.name)]))
+  // Phantom Thief: a Shadow set activates with one piece, except the "Touch" sets (item.touchSet)
+  const shadowWorn = new Set(equipped.filter((p) => p.slot.startsWith('shadow') && !p.item.touchSet).map((p) => p.item.name))
+  const setMissing = (members: string[]) => {
+    const missing = members.filter((n) => !wearing.has(n))
+    if (missing.length && rules.shadow?.singlePieceSets && members.some((n) => shadowWorn.has(n))) return []
+    return missing
+  }
 
   // ---- pass 1: everything that does not depend on stats ----
   for (const p of equipped) {
@@ -214,7 +250,7 @@ export function computeSheet(
           const k = setKey(m)
           if (seenSetBonus.has(k)) continue
           seenSetBonus.add(k)
-          const missing = m.cond.members.filter((n) => !wearing.has(n))
+          const missing = setMissing(m.cond.members)
           if (missing.length) {
             skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
             continue
@@ -228,7 +264,7 @@ export function computeSheet(
           if (seenSetBonus.has(k)) continue
           seenSetBonus.add(k)
           const members = m.cond.members
-          const missing = members.filter((n) => !wearing.has(n))
+          const missing = setMissing(members)
           if (missing.length) {
             skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
             continue
@@ -244,7 +280,7 @@ export function computeSheet(
           if (seenSetBonus.has(k)) continue
           seenSetBonus.add(k)
           const members = m.cond.members
-          const missing = members.filter((n) => !wearing.has(n))
+          const missing = setMissing(members)
           if (missing.length) {
             skipped.push({ raw: m.raw, itemName: it.name, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
             continue
@@ -331,8 +367,10 @@ export function computeSheet(
   }
 
   // ---- Simulator buffs (the Planner passes empty toggles) ----
-  for (const bm of rules.buffMods(toggles, { skills: build.skills, stats: build.stats })) {
-    addMod(totals, { key: bm.key, value: bm.value, pct: bm.pct, cond: { t: 'always' }, src: { itemId: 0, line: -200 }, raw: bm.label }, 1)
+  for (const bm of rules.buffMods(toggles, { skills: build.skills, stats: build.stats, baseLv: build.baseLv })) {
+    // "skill_dmg:sonic blow" = scoped to a skill (Fury)
+    const [key, scopeSkill] = bm.key.split(':')
+    addMod(totals, { key, value: bm.value, pct: bm.pct, scope: scopeSkill ? { skill: scopeSkill } : undefined, cond: { t: 'always' }, src: { itemId: 0, line: -200 }, raw: bm.label }, 1)
   }
   if (food?.value) {
     addMod(totals, { key: food.stat, value: food.value, pct: false, cond: { t: 'always' }, src: { itemId: 0, line: -201 }, raw: 'food' }, 1)
@@ -365,7 +403,7 @@ export function computeSheet(
       const k = `${m.cond.set}|perstat|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}`
       if (seenSetBonus.has(k)) return
       seenSetBonus.add(k)
-      const missing = m.cond.members.filter((n) => !wearing.has(n))
+      const missing = setMissing(m.cond.members)
       if (missing.length) {
         skipped.push({ raw: m.raw, itemName, why: `set ${m.cond.set} incomplete: missing ${missing.join(', ')}` })
         return
@@ -557,6 +595,10 @@ export function computeSheet(
     // skillrange_by_distance does not include players (conf/battle/skill.conf: 14), so the skill's range decides;
     // Devil Raid (range 9) measured in-game 2026-09-30 without the build's Melee +15%
     rangeType: (skill?.range?.[Math.min(ctxSkillLv || 1, skill.range.length) - 1] ?? 1) >= 4 ? 'ranged' : 'melee',
+    endowChoices: weaponElement.from === 'no item grants an element' && !skill?.damage?.magic ? (rules.endows?.(toggles, build.skills) ?? []) : [],
+    elementBonus: rules.elementBonus?.(toggles, build.skills) ?? {},
+    skillFlat: skill?.damage?.miscPart ? skill.damage.miscPart.base + skill.damage.miscPart.perLvInt * (ctxSkillLv || 1) * stats.int : 0,
+    weaponWarning: skillWeaponWarning(skill, wType),
     unparsed,
     skipped,
     split: {

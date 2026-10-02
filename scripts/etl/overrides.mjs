@@ -23,12 +23,13 @@ export const ITEM_OVERRIDES = {
     why: '"Weapon Attack Power" treated as ATK% (approximation) [db]',
   },
   'Heir to the King Boots': {
-    desc: [['Physical and magical DMG\nvs all sizes +1% per refine', 'Damage +1% per refine']],
-    why: '"vs all sizes" applies to any target: Damage +1% per refine [db]',
+    desc: [['Physical and magical DMG\nvs all sizes +1% per refine', 'DMG vs All Sizes +1% per refine']],
+    // 2026-10-02: kept in the size category (adds with vs Large/Medium; categories multiply in battle_calc_cardfix)
+    why: '"vs all sizes" is the size category (bAddSize Size_All in the server script) [db]',
   },
   'Heir to the King Pendant': {
-    desc: [['Physical and magical DMG\nvs all elements +1% per\nrefine', 'Damage +1% per refine']],
-    why: '"vs all elements" applies to any target: Damage +1% per refine [db]',
+    desc: [['Physical and magical DMG\nvs all elements +1% per\nrefine', 'DMG vs All Elements +1% per refine']],
+    why: '"vs all elements" is the element category (bAddEle Ele_All in the server script) [db]',
   },
   'Evil Wing Ears': {
     desc: [['15% chance to leech 3% physical damage done as HP', 'Leech Rate +15%\nLeech Power +3%']],
@@ -73,6 +74,15 @@ export const ITEM_OVERRIDES = {
   'Mind Vessel Card': {
     desc: [['SP Regen 10%+1% per 2 base LUK', 'SP Regen +10%\nSP Regen +1% per 2 base LUK']],
     why: '"10%+1% per 2 base LUK" on one line does not match the parser; split into the flat part and the per-base-LUK part [db]',
+  },
+  ...Object.fromEntries(['Armor', 'Gloves', 'Pendant', 'Shoes'].map((piece) => [`Prime Self ${piece}`, {
+    desc: [["On kill, 0.05% chance\nper total set refine\nto activate\nMorroc's Mark for 30\nseconds.", "On kill, 0.05% chance per total set refine to activate Morroc's Mark for 30 seconds."]],
+    why: 'the wrapped "per total set refine" was glued to the line above and made "All Stats +4" scale with the set refine; it belongs to the Morroc\'s Mark proc [db]',
+  }])),
+  Edge: {
+    desc: [['If Refine is +7 or higher:\nDouble Effect', 'If Refine is +7 or higher:\nDelta Skyfall Cooldown -0.5s\nDelta Skyfall DMG+20%\nHP+2%']],
+    // the Defense Penetration sits above a blank line, apart from the block being doubled: left single [estimated]
+    why: '"Double Effect" at +7 repeats the block above it (Cooldown, DMG, HP); written out so the parser applies it [db]',
   },
   'Sage Ring': {
     refinable: false,

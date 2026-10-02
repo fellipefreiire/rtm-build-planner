@@ -44,7 +44,7 @@ function Slot({ id, build, active, onClear, onOpen, onSwitch, lock }: Props & { 
   const meta = SLOTS.find((s) => s.id === id)!
   const entry = build.slots[id]
   const item: Item | undefined = lockedBy ?? (entry ? byId.get(entry.id) : undefined)
-  const disponiveis = useMemo(() => itemsForSlot(meta.from, build.cls, true).length, [meta.from, build.cls])
+  const disponiveis = useMemo(() => itemsForSlot(meta.from, build.cls, true, id).length, [meta.from, build.cls, id])
 
   // a locked slot mirrors the piece that takes it, with its cards (two-handed weapon, Crown of Deceit)
   const cardIds = lock ? build.slots[lock.from]?.cards ?? [] : entry?.cards ?? []

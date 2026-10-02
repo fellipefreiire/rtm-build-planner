@@ -38,8 +38,8 @@ export const SLOTS: { id: SlotId; label: string; from: string }[] = [
   { id: 'upper', label: 'Upper', from: 'upper' },
   { id: 'mid', label: 'Mid', from: 'mid' },
   { id: 'lower', label: 'Lower', from: 'lower' },
-  { id: 'accessory', label: 'Accessory 1', from: 'accessory' },
-  { id: 'accessory2', label: 'Accessory 2', from: 'accessory' },
+  { id: 'accessory', label: 'Accessory (L)', from: 'accessory' },
+  { id: 'accessory2', label: 'Accessory (R)', from: 'accessory' },
   { id: 'shadowArmor', label: 'Shadow armor', from: 'shadowArmor' },
   { id: 'shadowShoes', label: 'Shadow shoes', from: 'shadowShoes' },
   { id: 'shadowGloves', label: 'Shadow gloves', from: 'shadowGloves' },
@@ -51,6 +51,19 @@ export const SLOTS: { id: SlotId; label: string; from: string }[] = [
   { id: 'pet', label: 'Pet', from: 'pet' },
   { id: 'ammo', label: 'Ammo', from: 'ammo' },
 ]
+
+/**
+ * Side of an accessory: the dump category says "Left Accessory" / "Unchained Left" or "Right Accessory" /
+ * "Unchained Right" (Mark of a Survivor only goes on the right, Megingjard only on the left). The rest fits either.
+ * Accessory (L) = left, Accessory (R) = right, as in the in-game equipment window.
+ */
+export function accessorySideOk(cat: string, slot: SlotId): boolean {
+  const side = slot === 'accessory' ? 'L' : slot === 'accessory2' ? 'R' : null
+  if (!side) return true
+  if (/\bleft\b/i.test(cat)) return side === 'L'
+  if (/\bright\b/i.test(cat)) return side === 'R'
+  return true
+}
 
 export type Cond =
   | { t: 'always' }
@@ -110,6 +123,8 @@ export type Item = {
   dropped: boolean
   /** accepts a Dream Enchant ("Dream Enchants available") */
   dreamEnchant: boolean
+  /** Shadow piece of a "Touch of …" set: Phantom Thief's single-piece rule does not apply */
+  touchSet?: boolean
   /** element the item gives to attacks (card/shadow endow, or the weapon's own) */
   endow?: string | null
   /** element the item gives to the armor */
@@ -134,6 +149,9 @@ export type SkillFormula = {
   canCrit: boolean; magic: boolean; formulaRaw: string
   /** cast time in seconds (dump text); 0 = instant */
   castVar?: number; castFixed?: number
+  /** second damage part added after everything, ignoring element and DEF: base + perLvInt × level × INT
+   *  (Soul Destroyer: battle.cpp ASC_BREAKER md.damage = 50 + rnd()%50 + 5 × lv × INT) [emu] */
+  miscPart?: { base: number; perLvInt: number }
 }
 
 export type Skill = {
@@ -147,6 +165,8 @@ export type Skill = {
   prose: string
   /** range in cells per level (range >= 4 = ranged attack) */
   range?: number[] | null
+  /** weapons the skill requires (dump `wep`, e.g. ['katar']); null = any */
+  weapons?: string[] | null
   damage: SkillFormula | null
 }
 

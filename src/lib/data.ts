@@ -4,7 +4,7 @@ import skillsJson from '@/data/skills.json'
 import classesJson from '@/data/classes.json'
 import coverageJson from '@/data/coverage.json'
 import aliasesJson from '@/data/id-aliases.json'
-import { ClassInfo, Item, Mob, Skill } from '@/lib/types'
+import { ClassInfo, Item, Mob, Skill, SlotId, accessorySideOk } from '@/lib/types'
 
 export const items = itemsJson as unknown as Item[]
 export const mobs = mobsJson as unknown as Mob[]
@@ -67,8 +67,8 @@ export function allowedCats(from: string, cls: string): Set<string> | null {
   return out
 }
 
-export function itemsForSlot(from: string, cls: string, onlyClass: boolean) {
-  const base = items.filter((i) => i.grp !== 'Card' && i.slots.includes(from))
+export function itemsForSlot(from: string, cls: string, onlyClass: boolean, slot?: SlotId) {
+  const base = items.filter((i) => i.grp !== 'Card' && i.slots.includes(from) && (!slot || accessorySideOk(i.cat, slot)))
   if (!onlyClass) return base
   const cats = allowedCats(from, cls)
   return base.filter((i) => canEquip(i, cls) && (!cats || cats.has(i.cat)))
