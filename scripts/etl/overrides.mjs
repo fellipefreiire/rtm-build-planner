@@ -115,10 +115,6 @@ export const SKILL_OVERRIDES = {
     desc: [['Damage is 25+1% per STR, per hit', 'Damage is 25+0% per level +1% per STR, per hit']],
     why: '"Damage is 25+1% per STR, per hit" has no "per level", so the parser skipped it and the skill never showed up as a damage skill [db]',
   },
-  ...Object.fromEntries(['phantom-thief/delta-skyfall', 'duelist/delta-skyfall'].map((k) => [k, {
-    desc: [['Requires a sword or dagger equipped.', 'Requires a sword or dagger equipped.\nSkill can be critical']],
-    why: 'the text does not say so, but Delta Skyfall crits in the live game [player report 2026-10-02]; the 2024 server code had no Critical flag on SC_TRIANGLESHOT',
-  }])),
   'revenant/haunting-slice': {
     // no damage number anywhere: a 0% formula carries the cooldown; the rotation marks it "no formula"
     desc: [['Damage is fixed based on ATK and Str.', 'Damage is 0+0% per level.']],
