@@ -1,6 +1,6 @@
 'use client'
 import { Mob } from '@/lib/types'
-import { StatSheet } from '@/lib/engine/sheet'
+import { StatSheet, skillBonus } from '@/lib/engine/sheet'
 
 const n1 = (v: number) => (Math.round(v * 10) / 10).toLocaleString('en-US')
 
@@ -16,7 +16,7 @@ export default function SimStats({ base, buffed, mob }: { base: StatSheet; buffe
   const p = (s: StatSheet, k: string) => (s.totals.pct[k] ?? 0) + (s.totals.flat[k] ?? 0)
   // 2026-10-02: the rows used to say "Roaring" for every class; now they follow the class's reference skill
   const skill = (buffed.skillName ?? 'skill').replace(/\b\w/g, (c) => c.toUpperCase())
-  const boost = (s: StatSheet) => (s.skillName ? s.totals.scoped.skill_dmg?.[s.skillName] ?? 0 : 0)
+  const boost = (s: StatSheet) => skillBonus(s.totals.scoped.skill_dmg, s.skillName)
   const ranged = buffed.rangeType === 'ranged'
   const hasShield = !!(base.shield || buffed.shield)
 

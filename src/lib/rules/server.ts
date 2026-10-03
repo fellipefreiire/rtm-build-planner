@@ -45,6 +45,37 @@ export function penEffect(pen: number): number {
 }
 
 /**
+ * Weapon size penalty, % of the weapon ATK by target size [Small, Medium, Large]. `[emu 2024]` db/size_fix.yml
+ * (customized by RTM) + Knuckle from db/re. Omitted = 100. Only the weapon part (weapon ATK × (1 + STR/200)) takes it
+ * (battle.cpp battle_calc_base_weapon_attack → battle_calc_sizefix); status ATK, refine and gear ATK do not.
+ */
+const SIZE_FIX: Record<string, [number, number, number]> = {
+  Dagger: [100, 90, 75], '1hSword': [90, 100, 90], '2hSword': [90, 90, 100], '1hSpear': [90, 90, 100],
+  '2hSpear': [90, 90, 100], '1hAxe': [70, 90, 100], '2hAxe': [70, 90, 100], Mace: [90, 100, 100],
+  Bow: [100, 100, 90], Musical: [90, 100, 90], Whip: [90, 100, 75], Book: [100, 100, 75], Katar: [90, 100, 90],
+  Knuckle: [100, 100, 90],
+}
+export function sizeFix(weaponType: string, size: string): number {
+  const i = ['small', 'medium', 'large'].indexOf(String(size).toLowerCase())
+  return i < 0 ? 100 : SIZE_FIX[weaponType]?.[i] ?? 100
+}
+
+/**
+ * A monster's DEF against a player's weapon attack, renewal `[emu 2024]` battle.cpp:5665:
+ * damage × (4000 + DEF) / (4000 + 10 × DEF) − soft DEF. The monster's soft DEF is level + VIT/2
+ * (status.cpp status_calc_misc). Measured 2026-10-02: Thief Back Stab on Orc Lady (lv47, DEF 25, VIT 25)
+ * 1000 in-game; the old player curve (K=384, no soft DEF) gave 1067.
+ */
+export function mobHardDef(def: number): number {
+  const d = Math.max(-399, def)
+  return (4000 + d) / (4000 + 10 * d)
+}
+export function mobSoftDef(lv: number, vit: number): number {
+  return Math.floor(lv + vit / 2)
+}
+
+
+/**
  * Damage-taken multiplier from DEF.
  * `[derived from 1 data point]` — the only known pair: DEF 346 -> 0.526
  * (measured on the reference build). Solving def/(def+K): K = 384.

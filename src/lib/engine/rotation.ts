@@ -5,7 +5,7 @@ import { Build, Item, Mob, Skill } from '@/lib/types'
 import { ClassRules } from '@/lib/rules/classes'
 import { CastCtx, CastPlan, LaneSpan, rotationRulesFor } from '@/lib/rules/rotation'
 import { emuAcdMs } from '@/lib/rules/server'
-import { computeSheet, StatSheet } from './sheet'
+import { computeSheet, skillBonus, StatSheet } from './sheet'
 import { simulate } from './simulate'
 import { ISR_TICK, SP_TICK, spCost, spRegen } from './fight'
 
@@ -113,7 +113,8 @@ export function runRotation(i: RotationInput): RotationResult {
 
   const base = computeSheet({ ...build, skillKey: null, anchor: null }, i.byId, null, rules, i.toggles, i.food)
   // ---- SP: RTM regen ticks (natural every 1.2 s, Increase SP Recovery every 4.5 s) ----
-  const isrLv = build.skills['trickster/increase-sp-recovery'] ?? 0
+  // Increase SP Recovery is learned as a Thief (thief/) or a Trickster (trickster/)
+  const isrLv = Math.max(build.skills['trickster/increase-sp-recovery'] ?? 0, build.skills['thief/increase-sp-recovery'] ?? 0)
   const { maxSp, natural: spNat, isr: spIsr, flatSec: spSec, perSec: spPerSec } = spRegen(base, isrLv)
   let sp = maxSp
   let nextNat = SP_TICK
@@ -305,7 +306,7 @@ export function runRotation(i: RotationInput): RotationResult {
     const amotion = sheetNow.aspd ? Math.max(0, 2000 - 10 * sheetNow.aspd.v) / 1000 : 0
     const delay = Math.max(MIN_DELAY, acd, amotion)
     const end = start + cast + delay
-    const cdMods = sheetNow.totals.scoped.skill_cooldown?.[s.name.toLowerCase()] ?? 0
+    const cdMods = skillBonus(sheetNow.totals.scoped.skill_cooldown, s.name)
     ready.set(key, start + Math.max(0, (d?.cooldown ?? 0) + cdMods))
 
     events.push({

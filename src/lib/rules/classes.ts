@@ -15,6 +15,10 @@ export type RuleCtx = {
   leechPower: number
   /** points allocated in the skill tree, by skill key */
   skills: Record<string, number>
+  /** weapon type in the emulator (Scythe = Mace) */
+  weaponType?: string
+  /** a weapon in the off-hand */
+  dualWield?: boolean
 }
 
 export type Toggle = {
@@ -222,7 +226,7 @@ const DARK_KNIGHT: ClassRules = {
   },
 }
 
-// Thief line (Unchained Thief, Phantom Thief): not calibrated. Passives from the skill texts [db].
+// Thief line (Thief, Unchained Thief, Phantom Thief): not calibrated. Passives from the skill texts [db].
 const thiefPassives = (c: PassiveCtx) => {
   const blade = c.weaponType === 'Dagger' || c.weaponType === '1hSword'
   return {
@@ -277,12 +281,28 @@ const thiefEndows: NonNullable<ClassRules['endows']> = (t, skills) => {
   if (t.enchantPoison && (skills['thief/enchant-poison'] ?? 0)) out.push({ el: 'Poison', label: 'Enchant Poison' })
   return out
 }
-const UNCHAINED_THIEF: ClassRules = {
-  ...GENERIC('Unchained Thief'), passives: thiefPassives,
+// Back Stab "Single-Wielding a Dagger: AGI bonus is tripled, Bonus per skill level tripled, Extra 5% scaling per
+// level of Improve Dodge" [db]. The emu 2024 has the same shape (battle.cpp:4119, with 3% per Improve Dodge then)
+const backStabDagger = ({ stats, skillKey, skillLv, skills, weaponType, dualWield }: RuleCtx): Extra[] => {
+  if (skillKey !== 'thief/back-stab' || weaponType !== 'Dagger' || dualWield) return []
+  const id = skills['thief/improve-dodge'] ?? 0
+  const out: Extra[] = [
+    { label: 'Dagger: per level ×3', value: 2 * 5 * skillLv, prov: 'db', why: '5% per level tripled (+10% per level)' },
+    { label: 'Dagger: AGI ×3', value: 2 * stats.agi, prov: 'db', why: '1% per AGI tripled (+2% per AGI)' },
+  ]
+  if (id) out.push({ label: `Dagger: Improve Dodge Lv${id}`, value: 5 * id, prov: 'db', why: '5% per level of Improve Dodge' })
+  return out
+}
+const THIEF: ClassRules = {
+  ...GENERIC('Thief'), passives: thiefPassives,
   simBuffs: THIEF_LINE_BUFFS,
   buffMods: (t, c) => [...thiefBuffMods(t, c), ...thiefLineMods(t, c)],
+  skillPctExtra: backStabDagger,
   endows: thiefEndows,
+  // HIT: status window 2026-10-02 (lv36, DEX 27, LUK 5, +14 HIT from a random option) showed 305 against 280 from the formula
+  innate: { ...INNATE, why: 'HIT +25 measured in-game 2026-10-02 (305 against 280), as on Revenant; HP ×1.10 [estimated] not measured yet' },
 }
+const UNCHAINED_THIEF: ClassRules = { ...THIEF, name: 'Unchained Thief' }
 const PHANTOM_THIEF: ClassRules = {
   ...UNCHAINED_THIEF,
   name: 'Phantom Thief',
@@ -298,7 +318,9 @@ const PHANTOM_THIEF: ClassRules = {
   ],
   endows: thiefEndows,
   // Duel Counters (coins): read as added skill %, like the other "+N% per stat" lines [estimated: the text does not say]
-  skillPctExtra: ({ stats, toggles, skillKey }) => {
+  skillPctExtra: (c) => {
+    const { stats, toggles, skillKey } = c
+    if (skillKey === 'thief/back-stab') return backStabDagger(c)
     const n = Array.from({ length: 10 }, (_, i) => i + 1).find((k) => toggles[`duelCounters:lv${k}`]) ?? 0
     if (!toggles.duelCounters || !n) return []
     if (skillKey === 'phantom-thief/delta-skyfall') {
@@ -329,7 +351,7 @@ const PHANTOM_THIEF: ClassRules = {
 }
 
 const TABLE: Record<string, ClassRules> = {
-  Revenant: REVENANT, Trickster: TRICKSTER, 'Dark Knight': DARK_KNIGHT,
+  Revenant: REVENANT, Trickster: TRICKSTER, 'Dark Knight': DARK_KNIGHT, Thief: THIEF,
   'Unchained Thief': UNCHAINED_THIEF, 'Phantom Thief': PHANTOM_THIEF,
 }
 

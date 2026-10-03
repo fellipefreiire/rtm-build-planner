@@ -75,6 +75,9 @@ export type StatSheet = {
   elementBonus: Record<string, number>
   /** flat damage added after every multiplier (Soul Destroyer's second part) */
   skillFlat: number
+  /** weapon type in the emulator, and the part of the ATK the size penalty cuts (weapon ATK × (1 + STR/200) × ATK%) */
+  weaponType: string
+  weaponSizePart: number
   /** the skill needs a weapon the build does not wield (Sonic Blow without a Katar) */
   weaponWarning: string | null
   skillParts: Extra[]
@@ -99,6 +102,16 @@ const CONDITIONAL_SKIP: Record<string, string> = {
  * Set bonus dedupe key: the same bonus is repeated on every piece. The scope is part of it: "Damage vs all
  * races +10%" is 10 mods with the same text, one per race, and without the scope only the first one counted.
  */
+/**
+ * Value of a skill-scoped bonus for a skill name. Item texts spell skill names their own way
+ * ("Backstab DMG +15%" for the skill Back Stab), so spaces do not count.
+ */
+export const skillBonus = (bucket: Record<string, number> | undefined, name: string | null | undefined): number => {
+  if (!bucket || !name) return 0
+  const want = name.toLowerCase().replace(/\s+/g, '')
+  return Object.entries(bucket).reduce((a, [k, v]) => (k.replace(/\s+/g, '') === want ? a + v : a), 0)
+}
+
 const scopeKey = (m: Modifier) => (m.scope ? JSON.stringify(m.scope) : '')
 const setKey = (m: Modifier) =>
   m.cond.t === 'set_bonus' ? `${m.cond.set}|${m.key}|${m.value}|${m.pct}|${scopeKey(m)}|${m.raw}` : ''
@@ -516,6 +529,7 @@ export function computeSheet(
   const ctx = {
     stats, toggles, skillKey: skill?.key ?? null, skillLv: ctxSkillLv,
     baseLv: build.baseLv, leechPower: pct('leech_power') + flat('leech_power'), skills: build.skills,
+    weaponType: wType, dualWield: !!offEq && offEq.item.grp === 'Weapon',
   }
 
   // ---- skill % ----
@@ -599,13 +613,15 @@ export function computeSheet(
     skillParts,
     skillName: skill ? skill.name.toLowerCase() : null,
     // a skill that does not crit can be made to by an item (Mirage Gem: "Delta Skyfall can crit.")
-    canCrit: (skill?.damage?.canCrit ?? true) || !!(skill && totals.scoped.skill_can_crit?.[skill.name.toLowerCase()]),
+    canCrit: (skill?.damage?.canCrit ?? true) || !!(skill && skillBonus(totals.scoped.skill_can_crit, skill.name)),
     magic: !!skill?.damage?.magic,
     // skillrange_by_distance does not include players (conf/battle/skill.conf: 14), so the skill's range decides;
     // Devil Raid (range 9) measured in-game 2026-09-30 without the build's Melee +15%
     rangeType: (skill?.range?.[Math.min(ctxSkillLv || 1, skill.range.length) - 1] ?? 1) >= 4 ? 'ranged' : 'melee',
     endowChoices: weaponElement.from === 'no item grants an element' && !skill?.damage?.magic ? (rules.endows?.(toggles, build.skills) ?? []) : [],
     elementBonus: rules.elementBonus?.(toggles, build.skills) ?? {},
+    weaponType: wType,
+    weaponSizePart: weaponAtk * (1 + stats.str / 200) * (1 + pct('atk') / 100),
     skillFlat: skill?.damage?.miscPart ? skill.damage.miscPart.base + skill.damage.miscPart.perLvInt * (ctxSkillLv || 1) * stats.int : 0,
     weaponWarning: skillWeaponWarning(skill, wType),
     unparsed,
