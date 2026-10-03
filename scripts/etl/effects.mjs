@@ -30,6 +30,9 @@ export const MOD_KEYS = new Set([
   'atk_from_def', 'matk_from_mdef', 'soft_def', 'hp_limit',
   // 2026-10-01: Heir to the King ("Adds DEF equal to 10% of your total ATK"); flat SP/HP every second
   'def_from_atk', 'mdef_from_matk', 'sp_per_sec', 'hp_per_sec',
+  // 2026-10-03: "Magic vs Medium +5%", "Magic DMG vs all sizes +5%" (King's Wizard, Follower Ring): bMagicAddSize, its own
+  // category in battle_calc_cardfix (multiplies with the element one), no longer read as plain magic damage
+  'magic_vs_size',
 ])
 
 const STATS = ['str', 'agi', 'vit', 'int', 'dex', 'luk']
@@ -516,7 +519,16 @@ export function parseDesc(desc, itemId) {
     // "Magic Damage +7%", "Dark Magic DMG+10%", "Fire, Water, Wind and Earth magic DMG +20%",
     // "Water-element magic damage +2% per refine": magic damage, overall or for the skill's element.
     // Used to fall into skillDmgAfter as a skill called "magic" / "fire magic" and count for nothing (2026-10-01)
-    if ((m = /^(?<els>[a-z ,\/-]*?)\s*(?:-?element(?:al)?\s+)?magic(?:al)?\s+(?:dmg|damage)(?:\s+vs\s+all\s+sizes)?\s*(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%(?<pr>\s+per\s+refine)?$/i.exec(l))) {
+    // "Magic vs Medium +5%", "Magic vs All Sizes +1% per Refine", "Magic DMG vs all sizes +5%": magic damage by target size
+    // (bMagicAddSize). They used to fall through as unparsed (King's Wizard) or as overall magic damage (Follower Ring) (2026-10-03)
+    if ((m = /^magic(?:al)?(?:\s+(?:dmg|damage))?\s+(?:vs\.?|against)\s+(?<t>all\s+sizes?|small|medium|large)\s*(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%(?<pr>\s+per\s+refine)?$/i.exec(l))) {
+      const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
+      const c = m.groups.pr ? { t: 'per_refine', each: 1 } : lineCond
+      const t = norm(m.groups.t)
+      for (const size of /^all/.test(t) ? SIZES : [t]) mods.push(mk('magic_vs_size', v, true, c, { size }, src, raw))
+      return
+    }
+    if ((m = /^(?<els>[a-z ,\/-]*?)\s*(?:-?element(?:al)?\s+)?magic(?:al)?\s+(?:dmg|damage)\s*(?<sign>[+-])\s*(?<n>\d+(?:[.,]\d+)?)\s*%(?<pr>\s+per\s+refine)?$/i.exec(l))) {
       const els = norm(m.groups.els).replace(/-$/, '').trim()
       const v = (m.groups.sign === '-' ? -1 : 1) * num(m.groups.n)
       const c = m.groups.pr ? { t: 'per_refine', each: 1 } : lineCond

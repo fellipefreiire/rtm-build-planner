@@ -19,6 +19,8 @@ export type RuleCtx = {
   weaponType?: string
   /** a weapon in the off-hand */
   dualWield?: boolean
+  /** the chosen skill deals magic damage (MATK) */
+  magic?: boolean
 }
 
 export type Toggle = {
@@ -163,6 +165,16 @@ const trueSightMods = (t: Record<string, boolean>, skills?: Record<string, numbe
   ]
 }
 
+/**
+ * Dark Messenger in Combo Ready: +30% + 1% per STR on top of the base 20% + 1% per STR. The text says "1.5x damage when
+ * combo ready"; the code (SL_SMA, battle.cpp:6788, SC_OVERBRANDREADY) and Refuge Test Patch Notes 4 ("base 10 -> 20 and
+ * combo 15 -> 30") say otherwise, and the in-game 14380 of 2026-10-03 only fits the code. Combo Ready off = only the base.
+ */
+const darkMessengerCombo = ({ stats, toggles, skillKey }: RuleCtx): Extra[] =>
+  skillKey === 'trickster/dark-messenger' && toggles.comboReady !== false
+    ? [{ label: 'Combo Ready', value: 30 + stats.str, prov: 'emu', why: '+30% + 1% per STR in Combo Ready (SL_SMA, battle.cpp:6788; Patch Notes 4: combo 30) [emu + patch notes]' }]
+    : []
+
 /** HP ×1.10 and HIT +25 with nothing equipped: same on Revenant and Dark Knight. */
 const INNATE = { hpRate: 10, hit: 25, pd: 0 }
 
@@ -185,12 +197,14 @@ const REVENANT: ClassRules = {
     ...trueSightMods(t, c?.skills),
     ...(t.vampireMark ? [{ key: 'leech_power_buff', value: 15, pct: true, label: 'Vampire Mark' }] : []),
   ],
-  skillPctExtra: ({ stats, toggles, skillKey, skillLv }) => {
-    const out: Extra[] = []
+  skillPctExtra: (c) => {
+    const { stats, toggles, skillKey, skillLv } = c
+    const out: Extra[] = darkMessengerCombo(c)
     // Roaring's +2% per LUK comes from the dump since 2026-09-28 (it used to be patched here)
     // Server bug [player report 2026-10-01]: Darkside does not apply to Scythe Reap nor Reaping Slash.
     // Remove the skills from this list when RTM fixes it.
-    if (toggles.darkside && !DARKSIDE_BUGGED.has(skillKey ?? '')) {
+    // "Adds 2% per DEX Scaling to all Physical skills" [db]: magic skills (Dark Messenger, Flaming Wave) do not get it
+    if (toggles.darkside && !c.magic && !DARKSIDE_BUGGED.has(skillKey ?? '')) {
       out.push({ label: 'Darkside Shadow', value: 2 * stats.dex, prov: 'reported', why: '+2% per DEX on physical skills' })
     }
     if (toggles.comboReady === false && skillKey === 'revenant/roaring-overslash') {
@@ -239,6 +253,7 @@ const TRICKSTER: ClassRules = {
   ...GENERIC('Trickster'),
   simBuffs: TRICKSTER_BUFFS,
   buffMods: (t, c) => trueSightMods(t, c?.skills),
+  skillPctExtra: darkMessengerCombo,
   passives: (c) => {
     const sm = scytheMastery(c)
     return c.weaponType === 'Mace' ? sm : { pd: sm.pd }

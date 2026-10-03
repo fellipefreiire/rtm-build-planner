@@ -531,7 +531,7 @@ export function computeSheet(
   const ctx = {
     stats, toggles, skillKey: skill?.key ?? null, skillLv: ctxSkillLv,
     baseLv: build.baseLv, leechPower: pct('leech_power') + flat('leech_power'), skills: build.skills,
-    weaponType: wType, dualWield: !!offEq && offEq.item.grp === 'Weapon',
+    weaponType: wType, dualWield: !!offEq && offEq.item.grp === 'Weapon', magic: !!skill?.damage?.magic,
   }
 
   // Fan of Knives has its own ATK pool (status + right weapon + ammo, Hallucination Walk) [measured 2026-09-18]

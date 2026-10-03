@@ -122,9 +122,10 @@ export const SKILL_OVERRIDES = {
     why: 'in-game tooltip says "Damage is 200+20% +2% per Vit." (dump says 100); the emulator has 200 + 20×lv + 2×VIT (battle.cpp:4541) [in-game 2026-10-01]',
   },
   'trickster/dark-messenger': {
-    // hits = skill level and ×1.5 in Combo Ready are applied by the rotation (rules/rotation/revenant.ts)
-    desc: [['Damage is 25+1% per STR, per hit', 'Damage is 25+0% per level +1% per STR, per hit']],
-    why: '"Damage is 25+1% per STR, per hit" has no "per level", so the parser skipped it and the skill never showed up as a damage skill [db]',
+    // hits = skill level (rotation); Combo Ready adds +30% + 1% per STR (rules/classes.ts), it is not ×1.5
+    desc: [['Damage is 25+1% per STR, per hit', 'Damage is 20+0% per level +1% per STR, per hit']],
+    why: 'the text says "25+1% per STR" and "1.5x when combo ready", but Refuge Test Patch Notes 4 (2026-08-29) say "Dark Messenger base 10 -> 20 and combo 15 -> 30": '
+      + 'the code is base 20 + 1%/STR and, in Combo Ready, +30 + 1%/STR more (SL_SMA, battle.cpp:6788, with SC_OVERBRANDREADY). The in-game 14380 (2026-10-03) only fits this [patch notes + emu]',
   },
   'revenant/haunting-slice': {
     // no damage number anywhere: a 0% formula carries the cooldown; the rotation marks it "no formula"

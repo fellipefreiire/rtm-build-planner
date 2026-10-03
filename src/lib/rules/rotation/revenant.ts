@@ -89,9 +89,10 @@ export const REVENANT_ROTATION: RotationRules<State> = {
       notes.push('no damage formula ("fixed based on ATK and Str"): counted as 0')
       if (c.lv < 5) notes.push(`${20 * c.lv}% chance to autocast Scythe Reap: not counted (only Lv5 is a sure proc)`)
     } else if (c.key === DARK_MESSENGER) {
-      // "Each level increases hit amount, up to 10. Each hit deals full damage. Deals 1.5x damage when combo ready" [db]
+      // "Each level increases hit amount, up to 10. Each hit deals full damage" [db]. Combo Ready is not ×1.5:
+      // it adds +30% + 1% per STR to the skill % (rules/classes.ts, darkMessengerCombo) [emu + Patch Notes 4]
       hits = c.lv
-      if (cr) mult = 1.5
+      if (!cr) notes.push('without Combo Ready: base 20% + 1% per STR only')
     } else if (c.key === UNDERWORLD) {
       hits = 15
       mult = 1 + 0.04 * before
@@ -99,8 +100,8 @@ export const REVENANT_ROTATION: RotationRules<State> = {
 
     return {
       hits, mult, pctAdd: 0, notes, stacksBefore: before,
-      // Combo Ready changes Roaring's formula; for every other skill the sheet keeps it on
-      sheetToggles: { comboReady: c.key === ROARING ? cr : true },
+      // Combo Ready changes Roaring's and Dark Messenger's formula; for every other skill the sheet keeps it on
+      sheetToggles: { comboReady: c.key === ROARING || c.key === DARK_MESSENGER ? cr : true },
       ...(c.key === HELLRAISER ? { element: 'Fire' } : {}),
     }
   },

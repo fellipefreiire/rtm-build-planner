@@ -77,14 +77,27 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   // magic skills (Conflagration): MATK × skill % × skill boost × skill element × MDEF, no crit, no physical pools
   // or penetration. Hard MDEF as in renewal: (1000 + MDEF) / (1000 + 10 × MDEF); soft MDEF is ignored [emu, simplified]
   const mdefCut = (1000 + mob.mdef) / (1000 + 10 * mob.mdef)
-  // "Magic Damage +7%" (Arch Brooch) and "Dark Magic DMG +10%": overall + the skill's element (weapon element for Dark Messenger)
+  // "Magic Damage +7%" (Arch Brooch) and "Dark Magic DMG +10%": overall + the skill's element, added together (bMagicAtkEle,
+  // element + Ele_All) [emu].
+  // Dark Messenger [measured in-game 2026-10-03, 5 casts on the dummy]: "Fire Magic DMG" counts even with a Neutral weapon
+  // (without Burning Scythe the damage is ×1.22 above the model, = Fire 10 + 10 + 2), and Burning Scythe Lv1 adds ~6% on top
+  // (the code would give +1%/lv, SC_FIREWEAPON val1; scaling with level unknown). Open: whether Dark Messenger is always Fire
+  // (would change the element table vs Water/Earth mobs) — here only the bonus is read as Fire, the element stays the weapon's.
   const magicAll = sheet.totals.pct.magic_dmg ?? 0
-  const magicEl = sc.magic_dmg?.[lower(sheet.weaponElement.v)] ?? 0
+  const isDm = sheet.skillName === 'dark messenger'
+  const burningOn = sheet.weaponElement.from === 'Burning Scythe' && elem.v === 'Fire'
+  const burning = !burningOn ? 0 : isDm ? 6 : (build.skills['trickster/burning-scythe'] ?? 0)
+  const magicElKey = isDm ? 'fire' : lower(elem.v)
+  const magicEl = (sc.magic_dmg?.[magicElKey] ?? 0) + burning
+  // "Magic vs Medium +5%", "Magic DMG vs all sizes +5%": bMagicAddSize, its own category that multiplies with the
+  // element one (battle_calc_cardfix BF_MAGIC: race × element × atk element × size × class) [emu]
+  const magicSize = sc.magic_vs_size?.[lower(mob.size)] ?? 0
   const layers: Layer[] = sheet.magic ? [
     { label: 'MATK', mult: sheet.matk.v, why: sheet.matk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
-    { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${sheet.weaponElement.v} magic damage` },
+    { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${isDm ? 'Fire' : elem.v} magic damage${isDm ? ' (Dark Messenger reads Fire Magic with any weapon element [measured 2026-10-03])' : ''}${burning ? ` (${burning}% from Burning Scythe${isDm ? ' [measured]' : ' [emu]'})` : ''}` },
+    ...(magicSize ? [{ label: 'magic vs size', mult: 1 + magicSize / 100, why: `${magicSize}% magic damage vs ${mob.size} (multiplies with the element category, battle_calc_cardfix) [emu]` }] : []),
     { label: 'target MDEF', mult: mdefCut, why: `MDEF ${mob.mdef}: (1000 + MDEF) / (1000 + 10 × MDEF), soft MDEF ignored [emu, simplified]` },
     { label: 'skill element', mult: elemAtk, why: `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
   ] : [

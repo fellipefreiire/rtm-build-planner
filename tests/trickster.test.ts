@@ -1,5 +1,6 @@
 // Trickster (2026-10-01): class rules shared with Revenant, Dark Beak's element and Dark Messenger.
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { computeSheet } from '@/lib/engine/sheet'
 import { runRotation } from '@/lib/engine/rotation'
 import { simulate } from '@/lib/engine/simulate'
@@ -69,12 +70,13 @@ describe('Trickster class rules', () => {
 })
 
 describe('Dark Messenger', () => {
-  it('is a Trickster damage skill: MATK, 25% + 1% per STR per hit, 10% extra current SP', () => {
+  // 2026-10-03: the text says 25% and "1.5x when combo ready"; Patch Notes 4 and the code say base 20 and combo +30 + 1%/STR
+  it('is a Trickster damage skill: MATK, 20% + 1% per STR per hit (Patch Notes 4), 10% extra current SP', () => {
     const s = skillMap.get(DM)!
-    expect(s.damage).toMatchObject({ base: 25, coefPerLevel: 0, perStat: [{ stat: 'str', pct: 1 }], magic: true, spPct: 10 })
+    expect(s.damage).toMatchObject({ base: 20, coefPerLevel: 0, perStat: [{ stat: 'str', pct: 1 }], magic: true, spPct: 10 })
   })
 
-  it('learned, it is in the rotation palette; hits = level, ×1.5 in Combo Ready', () => {
+  it('learned, it is in the rotation palette; hits = level, Combo Ready adds +30% + 1% per STR (not ×1.5)', () => {
     const b = trickster()
     b.skills[SM] = 1; b.skills[SR] = 1; b.skills['trickster/dark-message'] = 1; b.skills[DM] = 7
     expect(rotationRulesFor('Trickster').palette(b, [])).toContain(DM)
@@ -82,7 +84,46 @@ describe('Dark Messenger', () => {
     const [cold, , combo] = r.events
     expect(cold.hits).toBe(7)
     expect(combo.comboReady).toBe(true)
-    expect(combo.damage / cold.damage).toBeCloseTo(1.5, 1)
+    // STR 60: (50 + 2 × 60) / (20 + 60)
+    expect(combo.damage / cold.damage).toBeCloseTo(170 / 80, 6)
+  })
+
+  it('Revenant set of 2026-10-03 (in-game 14380 with Burning Scythe): skill % 198, King\'s Wizard + Follower Ring vs size × Fire magic', () => {
+    const b = JSON.parse(readFileSync(new URL('./fixtures-data/revenant-dark-messenger-2026-10-03.json', import.meta.url), 'utf8')) as Build
+    const rules = rulesFor('Revenant')
+    const tg = learnedToggles(rules, b.skills, { burningScythe: true, darkside: true, comboReady: true })
+    const r = runRotation({ build: b, byId, steps: [DM, 'trickster/dark-message', DM], skills: skillMap, rules, toggles: tg, food: null, mob: mobBy('Average Dummy'), k: null })
+    const sh = computeSheet({ ...b, skillKey: DM }, byId, skillMap.get(DM)!, rules, tg)
+    const layers = simulate({ ...b, skillKey: DM }, sh, mobBy('Average Dummy')).layers
+    const mult = (label: string) => layers.find((l) => l.label === label)?.mult
+    expect(sh.skillPct?.v).toBe(198)                 // 50 + 2 × STR 74; Darkside (physical only) does not add
+    expect(mult('magic damage')).toBeCloseTo(1.28, 6) // Fire 10 + 10 + 2, Burning Scythe +6 [measured]
+    expect(mult('magic vs size')).toBeCloseTo(1.23, 6) // Follower Ring 5 × 2, King's Wizard gloves 5 + pendant 3 + set 5
+    expect(r.events[2].comboReady).toBe(true)
+    // in-game 13280 and 14380 (MATK roll ±6%); the JSON has LUK 1 below the print (MATK 167 instead of 168)
+    expect(r.events[2].damage).toBeCloseTo(13460, -1)
+  })
+
+  it('in-game 2026-10-03: Fire Magic DMG counts without Burning Scythe; all 4 cases within the MATK roll', () => {
+    const b = JSON.parse(readFileSync(new URL('./fixtures-data/revenant-dark-messenger-2026-10-03.json', import.meta.url), 'utf8')) as Build
+    b.stats.luk = 69   // status window: LUK 68 + 4
+    const rules = rulesFor('Revenant')
+    const seen: Record<string, number> = { 'false|false': 6310, 'true|false': 12580, 'false|true': 6490, 'true|true': 13280 }
+    for (const bs of [false, true]) {
+      const tg = learnedToggles(rules, b.skills, { burningScythe: bs, darkside: true, comboReady: true })
+      const r = runRotation({ build: b, byId, steps: [DM, 'trickster/dark-message', DM], skills: skillMap, rules, toggles: tg, food: null, mob: mobBy('Average Dummy'), k: null })
+      for (const [cr, e] of [[false, r.events[0]], [true, r.events[2]]] as const) {
+        expect(Math.abs(seen[`${cr}|${bs}`] / e.damage - 1)).toBeLessThan(0.06)
+      }
+    }
+  })
+})
+
+describe('Magic vs size', () => {
+  it('"Magic vs Medium +5%" and "Magic DMG vs all sizes +5%" are bMagicAddSize, not plain magic damage', () => {
+    expect(find('Follower Ring').mods.filter((m) => m.key === 'magic_vs_size').map((m) => m.scope?.size).sort()).toEqual(['large', 'medium', 'small'])
+    expect(find('Follower Ring').mods.some((m) => m.key === 'magic_dmg')).toBe(false)
+    expect(find("King's Wizard Gloves").mods).toContainEqual(expect.objectContaining({ key: 'magic_vs_size', value: 5, scope: { size: 'medium' }, cond: { t: 'always' } }))
   })
 })
 
