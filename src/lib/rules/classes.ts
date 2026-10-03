@@ -77,7 +77,7 @@ const perLv = (c: PassiveCtx, key: string, each: number, label: string, why: str
 const HW_KEYS = ['unchained-thief/hallucination-walk', 'assassin/hallucination-walk']
 const HW_BUFFS: Toggle[] = HW_KEYS.map((skill) => ({
   id: 'hallucinationWalk', skill, label: 'Hallucination Walk', default: true,
-  why: 'FLEE +10/level; Fan of Knives + AGI × Improve Dodge level to its ATK; Shadow Slash +5% per Improve Dodge level. 50 s / CD 120 s at Lv5 (41.7% uptime) [db; uptime measured 2026-09-18]. Needs a Shadow Orb.',
+  why: 'FLEE +10/level; Fan of Knives + AGI × Improve Dodge level (after its level multiplier, battle.cpp:3632); Shadow Slash +5% per Improve Dodge level. 50 s / CD 120 s at Lv5 (41.7% uptime) [db; uptime measured 2026-09-18]. Needs a Shadow Orb.',
 }))
 const hwLv = (skills: Record<string, number>) => Math.max(...HW_KEYS.map((k) => skills[k] ?? 0))
 const hwMods = (t: Record<string, boolean>, c?: { skills: Record<string, number> }): BuffMod[] => {
@@ -92,22 +92,30 @@ const hwShadowSlash = ({ toggles, skillKey, skills }: RuleCtx): Extra[] => {
 }
 
 /**
- * Fan of Knives ATK, measured in-game on 2026-09-18 (base/servidor/fan-of-knives.md): status ATK once + the right-hand
- * weapon's own ATK + ammo ATK, then the ATK% (percentages multiply). Flat ATK from gear, runes and cards gives 0
- * (rune ATK +5 = same damage); refine and mastery are not counted [not measured]. "Ignores defense, flee and
- * elements" [db]. Under Hallucination Walk: + AGI × Improve Dodge level, read as added to the same pool [estimated:
- * the form is not measured yet].
+ * Fan of Knives ATK. Shape from the emulator (battle.cpp:3632, KO_HAPPOKUNAI) [emu 2024]:
+ *   k × (status ATK + right weapon ATK + ammo ATK) × (level + 1) / 5
+ *   + AGI × Improve Dodge level, only under Hallucination Walk — added AFTER the level multiplier
+ * The 2024 code has k = 3 with status ATK twice. Patch of 2026-09-02: "no longer counts Status ATK twice. Its base
+ * coefficient was adjusted alongside it; on a normal build this is around a 20% damage reduction" [db]. Status ATK
+ * once matches the reading of 2026-09-18 (+1 status ATK = +12 damage); "−20%" with status ATK 150–180 and that reading
+ * give ~9 at Lv10, so k = 4.2 (×9.24 at Lv10) [estimated]. The per-level scaling after the patch and the
+ * Hallucination Walk term are not measured. Flat ATK from gear is not in the pool [measured]. No size penalty; skill
+ * ratio 100%; DEF, FLEE and element ignored [emu 2024]. See base/servidor/fan-of-knives.md
  */
+const FOK_K = 4.2
 export function fanOfKnivesAtk(c: RuleCtx & { statusAtk: number; weaponAtk: number; ammoAtk: number }): { pool: number; parts: string[] } | null {
   if (!/\/fan-of-knives$/.test(c.skillKey ?? '')) return null
+  const lv = c.skillLv || 10
+  const raw = c.statusAtk + c.weaponAtk + c.ammoAtk
+  const base = Math.floor(FOK_K * raw * (lv + 1) / 5)
   const id = c.skills['thief/improve-dodge'] ?? 0
   const hw = c.toggles.hallucinationWalk && hwLv(c.skills) ? c.stats.agi * id : 0
   return {
-    pool: c.statusAtk + c.weaponAtk + c.ammoAtk + hw,
+    pool: base + hw,
     parts: [
-      `Fan of Knives: status ATK ${c.statusAtk} (once)`, `right weapon ${c.weaponAtk}`, `ammo ${c.ammoAtk}`,
-      hw ? `Hallucination Walk: AGI ${c.stats.agi} × Improve Dodge ${id} = ${hw} [estimated form]` : '',
-      'flat ATK from gear/refine/mastery not counted [measured 2026-09-18]',
+      `Fan of Knives Lv${lv}: ${FOK_K} × (status ATK ${c.statusAtk} + right weapon ${c.weaponAtk} + ammo ${c.ammoAtk}) × ${lv + 1} / 5 = ${base} [estimated after the 02/09 patch]`,
+      hw ? `Hallucination Walk: + AGI ${c.stats.agi} × Improve Dodge ${id} = ${hw} (after the level multiplier) [emu 2024, not measured]` : '',
+      'flat ATK from gear not counted [measured 2026-09-18]',
     ],
   }
 }

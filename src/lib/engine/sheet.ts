@@ -629,7 +629,8 @@ export function computeSheet(
     endowChoices: weaponElement.from === 'no item grants an element' && !skill?.damage?.magic ? (rules.endows?.(toggles, build.skills) ?? []) : [],
     elementBonus: rules.elementBonus?.(toggles, build.skills) ?? {},
     weaponType: wType,
-    weaponSizePart: weaponAtk * (fok ? 1 : 1 + stats.str / 200) * (1 + pct('atk') / 100),
+    // Fan of Knives skips battle_calc_damage_parts: no size penalty [emu 2024]
+    weaponSizePart: fok ? 0 : weaponAtk * (1 + stats.str / 200) * (1 + pct('atk') / 100),
     ignoreDefEle: !!fok,
     skillFlat: skill?.damage?.miscPart ? skill.damage.miscPart.base + skill.damage.miscPart.perLvInt * (ctxSkillLv || 1) * stats.int : 0,
     weaponWarning: skillWeaponWarning(skill, wType),
