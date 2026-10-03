@@ -119,6 +119,21 @@ describe('Dark Messenger', () => {
   })
 })
 
+describe('Race/element/boss cards on magic', () => {
+  it('"DMG vs Formless +18%" (Chocolate Bear) raises Dark Messenger ×1.18 on the dummy; "Attack vs" (King\'s Knight) does not', () => {
+    const dmg = (card: string | null, shadow: string | null = null) => {
+      const b = trickster()
+      b.skillKey = DM; b.skillLv = 5
+      if (card) b.slots.armor = { id: find('Orphan Clothes').id, refine: 0, cards: [find(card).id] }
+      else b.slots.armor = { id: find('Orphan Clothes').id, refine: 0, cards: [] }
+      if (shadow) b.slots.shadowArmor = { id: find(shadow).id, refine: 0, cards: [] }
+      return simulate(b, computeSheet(b, byId, skillMap.get(DM)!, rulesFor('Trickster'), {}), mobBy('Average Dummy')).index
+    }
+    expect(dmg('Chocolate Bear Card') / dmg(null)).toBeCloseTo(1.18, 6)
+    expect(dmg(null, "King's Knight Armor")).toBeCloseTo(dmg(null), 6)
+  })
+})
+
 describe('Magic vs size', () => {
   it('"Magic vs Medium +5%" and "Magic DMG vs all sizes +5%" are bMagicAddSize, not plain magic damage', () => {
     expect(find('Follower Ring').mods.filter((m) => m.key === 'magic_vs_size').map((m) => m.scope?.size).sort()).toEqual(['large', 'medium', 'small'])

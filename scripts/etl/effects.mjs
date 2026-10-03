@@ -33,6 +33,9 @@ export const MOD_KEYS = new Set([
   // 2026-10-03: "Magic vs Medium +5%", "Magic DMG vs all sizes +5%" (King's Wizard, Follower Ring): bMagicAddSize, its own
   // category in battle_calc_cardfix (multiplies with the element one), no longer read as plain magic damage
   'magic_vs_size',
+  // 2026-10-03: "DMG vs Formless +18%" is bAddRace AND bMagicAddRace in the server script (Chocolate Bear Card); a magic twin
+  // of each "DMG/Damage vs X" (not "Attack vs" / "Physical DMG vs", which stay physical) [emu 2024 + player report]
+  'magic_vs_race', 'magic_vs_element', 'magic_vs_boss', 'magic_vs_nonboss',
 ])
 
 const STATS = ['str', 'agi', 'vit', 'int', 'dex', 'luk']
@@ -699,5 +702,12 @@ export function parseDesc(desc, itemId) {
     if (mods.length > mark) lastMods = mods.slice(mark)
   }
 
+  // "DMG vs X" counts for magic too (server script: bAddRace + bMagicAddRace, same for size/element/class; 95% of the items
+  // with an emu script). "Attack vs X" and "Physical DMG vs X" are physical only (King's Knight, Belena) [emu 2024]
+  for (const m of [...mods]) {
+    if (!/^dmg_vs_(race|size|element|boss|nonboss)$/.test(m.key)) continue
+    if (/^\s*(?:\d+%\s+)?(?:attack|physical(?!\s+and\s+magic))\b/i.test(m.raw ?? '')) continue
+    mods.push({ ...m, key: m.key.replace('dmg_vs_', 'magic_vs_') })
+  }
   return { mods, unparsed, lines: pieces.length, numeric }
 }

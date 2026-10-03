@@ -92,11 +92,18 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   // "Magic vs Medium +5%", "Magic DMG vs all sizes +5%": bMagicAddSize, its own category that multiplies with the
   // element one (battle_calc_cardfix BF_MAGIC: race × element × atk element × size × class) [emu]
   const magicSize = sc.magic_vs_size?.[lower(mob.size)] ?? 0
+  // "DMG vs Formless +18%" (Chocolate Bear Card) also has bMagicAddRace: race, target element and boss/non-boss, each its
+  // own category [emu 2024 + player report 2026-10-03]
+  const magicRace = sc.magic_vs_race?.[lower(mob.race)] ?? 0
+  const magicTgtEle = sc.magic_vs_element?.[lower(mob.element)] ?? 0
+  const magicClass = mob.mvp ? (sheet.totals.pct.magic_vs_boss ?? 0) : (sheet.totals.pct.magic_vs_nonboss ?? 0)
+  const magicPools = [magicRace, magicTgtEle, magicClass].reduce((a, v) => a * (1 + v / 100), 1)
   const layers: Layer[] = sheet.magic ? [
     { label: 'MATK', mult: sheet.matk.v, why: sheet.matk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
     { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${isDm ? 'Fire' : elem.v} magic damage${isDm ? ' (Dark Messenger reads Fire Magic with any weapon element [measured 2026-10-03])' : ''}${burning ? ` (${burning}% from Burning Scythe${isDm ? ' [measured]' : ' [emu]'})` : ''}` },
+    ...(magicPools !== 1 ? [{ label: 'race/element/boss pools', mult: magicPools, why: `race ${magicRace}% × element ${magicTgtEle}% × ${mob.mvp ? 'boss' : 'non-boss'} ${magicClass}% vs ${mob.race} ${mob.element} ("DMG vs X" is physical and magic; "Attack vs X" is physical only) [emu]` }] : []),
     ...(magicSize ? [{ label: 'magic vs size', mult: 1 + magicSize / 100, why: `${magicSize}% magic damage vs ${mob.size} (multiplies with the element category, battle_calc_cardfix) [emu]` }] : []),
     { label: 'target MDEF', mult: mdefCut, why: `MDEF ${mob.mdef}: (1000 + MDEF) / (1000 + 10 × MDEF), soft MDEF ignored [emu, simplified]` },
     { label: 'skill element', mult: elemAtk, why: `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
