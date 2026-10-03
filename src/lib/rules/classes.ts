@@ -358,6 +358,13 @@ const TABLE: Record<string, ClassRules> = {
 export const rulesFor = (cls: string): ClassRules => TABLE[cls] ?? GENERIC(cls)
 
 /**
+ * Job changes that grant every skill of the lineage at max level, with no skill points involved:
+ * the changer NPC runs `@allskill` (npc/re/r3/unchainedjobs.txt:175, 254, 339, 418) [emu 2024];
+ * confirmed in-game on Unchained Thief 2026-10-02 (both trees full, 0 skill points left).
+ */
+export const ALL_SKILLS_CLASSES = new Set(['Unchained Thief', 'Phantom Thief', 'Unchained Assassin', 'Unchained Rogue'])
+
+/**
  * Effective toggles of a build in the Simulator: a buff whose skill is not learned stays
  * off. Combo Ready is on by default (only off if the user unchecks it).
  */

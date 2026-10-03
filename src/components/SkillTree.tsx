@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { Build, ClassInfo, Skill } from '@/lib/types'
 import { skills as allSkills } from '@/lib/data'
+import { ALL_SKILLS_CLASSES } from '@/lib/rules/classes'
 import { useTip } from './Tooltip'
 import { SkillTip } from './tips'
 
@@ -9,6 +10,8 @@ type Props = {
   build: Build
   info: ClassInfo | undefined
   onAlloc: (key: string, lv: number) => void
+  /** replaces every allocated level at once (the "all skills" button) */
+  onSetAll: (skills: Record<string, number>) => void
 }
 
 /** Depth in the prerequisite tree — becomes the grid row. */
@@ -31,10 +34,12 @@ function depths(list: Skill[]) {
   return cache
 }
 
-export default function SkillTree({ build, info, onAlloc }: Props) {
+export default function SkillTree({ build, info, onAlloc, onSetAll }: Props) {
   const tip = useTip()
   const lineage = info?.lineage ?? []
   const caps = info?.tierCaps ?? []
+  // the job change granted every skill of the lineage: no point budget and no tier locks
+  const allFree = ALL_SKILLS_CLASSES.has(build.cls)
   const [tab, setTab] = useState<string | null>(null)
 
   /**
@@ -57,12 +62,12 @@ export default function SkillTree({ build, info, onAlloc }: Props) {
       const cap = isLast ? build.jobLv : caps[i]
       const total = cap ? Math.max(0, cap - 1) : 0
       const spent = spentBy(c)
-      const unlockedTier = i === 0 || prevSpent >= prevQuota
+      const unlockedTier = allFree || i === 0 || prevSpent >= prevQuota
       prevQuota += total
       prevSpent += spent
       return { cls: c, total, spent, cap, unlockedTier, isLast }
     })
-  }, [lineage, caps, build.skills, build.jobLv])
+  }, [lineage, caps, build.skills, build.jobLv, allFree])
 
   const unlocked = tiers.filter((t) => t.unlockedTier)
   const target = tab && lineage.includes(tab) ? tab : (unlocked[unlocked.length - 1]?.cls ?? lineage[0] ?? '')
@@ -90,7 +95,8 @@ export default function SkillTree({ build, info, onAlloc }: Props) {
   )
   const grandTotal = tiers.reduce((a, t) => a + t.total, 0)
   const spentTotal = tiers.reduce((a, t) => a + t.spent, 0)
-  const remaining = grandTotal - spentTotal
+  const remaining = allFree ? Infinity : grandTotal - spentTotal
+  const learnAll = () => onSetAll(Object.fromEntries(inLineage.filter((s) => !s.classNote).map((s) => [s.key, s.maxLv])))
 
   const byNameInLineage = useMemo(() => {
     const m = new Map<string, Skill>()
@@ -120,7 +126,7 @@ export default function SkillTree({ build, info, onAlloc }: Props) {
       <div className="eq-title">
         <span>✦</span> Skill Tree
         <span style={{ marginLeft: 'auto', fontWeight: 400 }}>
-          <small>{spentTotal}/{grandTotal} points</small>
+          <small>{allFree ? `${spentTotal} points · all granted` : `${spentTotal}/${grandTotal} points`}</small>
         </span>
       </div>
 
@@ -141,6 +147,12 @@ export default function SkillTree({ build, info, onAlloc }: Props) {
         ))}
       </div>
 
+      {allFree && (
+        <div className="raw" style={{ margin: '10px 12px 0', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span>The job change to {build.cls} grants every skill of the lineage at max level: no skill points.</span>
+          <button onClick={learnAll} style={{ marginLeft: 'auto' }}>Learn all</button>
+        </div>
+      )}
       {currentTier && !currentTier.unlockedTier && (
         <div className="raw" style={{ margin: '10px 12px 0' }}>
           You can browse this tree, but spending is locked: {lineage[lineage.indexOf(cls) - 1]} needs
@@ -199,10 +211,14 @@ export default function SkillTree({ build, info, onAlloc }: Props) {
 
       <div className="st-foot">
         <span>Skill Points</span>
-        <span className={remaining < 0 ? 'bad' : remaining === 0 ? 'ok' : ''}>
-          <b>{remaining}</b>
-          <small> of {grandTotal}</small>
-        </span>
+        {allFree ? (
+          <span className="ok"><b>all</b><small> granted by the job change</small></span>
+        ) : (
+          <span className={remaining < 0 ? 'bad' : remaining === 0 ? 'ok' : ''}>
+            <b>{remaining}</b>
+            <small> of {grandTotal}</small>
+          </span>
+        )}
       </div>
       </>
     </div>

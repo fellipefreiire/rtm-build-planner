@@ -196,6 +196,7 @@ export default function Page() {
               else b.skills[key] = lv
               return b
             })}
+            onSetAll={(skills) => patch((b) => { b.skills = { ...b.skills, ...skills }; return b })}
           />
         </section>
 
