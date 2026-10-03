@@ -134,6 +134,20 @@ describe('Race/element/boss cards on magic', () => {
   })
 })
 
+describe('Dark Messenger element bonus', () => {
+  it('Umbral Stars Shield (Water): the Water magic bonus counts; Burning Scythe swaps it for Fire', () => {
+    const b = JSON.parse(readFileSync(new URL('./fixtures-data/revenant-dark-messenger-umbral-2026-10-03.json', import.meta.url), 'utf8')) as Build
+    const rules = rulesFor('Revenant')
+    const magic = (bs: boolean) => {
+      const tg = learnedToggles(rules, b.skills, { burningScythe: bs, comboReady: true })
+      const sh = computeSheet({ ...b, skillKey: DM }, byId, skillMap.get(DM)!, rules, tg)
+      return simulate({ ...b, skillKey: DM }, sh, mobBy('Average Dummy')).layers.find((l) => l.label === 'magic damage')!.mult
+    }
+    expect(magic(false)).toBeCloseTo(1.14, 6) // Umbral Stars Pendant +7: Water magic +14%
+    expect(magic(true)).toBeCloseTo(1.06, 6)  // no Fire magic gear; Burning Scythe +6 [measured]
+  })
+})
+
 describe('Magic vs size', () => {
   it('"Magic vs Medium +5%" and "Magic DMG vs all sizes +5%" are bMagicAddSize, not plain magic damage', () => {
     expect(find('Follower Ring').mods.filter((m) => m.key === 'magic_vs_size').map((m) => m.scope?.size).sort()).toEqual(['large', 'medium', 'small'])

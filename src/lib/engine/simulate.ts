@@ -87,7 +87,10 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   const isDm = sheet.skillName === 'dark messenger'
   const burningOn = sheet.weaponElement.from === 'Burning Scythe' && elem.v === 'Fire'
   const burning = !burningOn ? 0 : isDm ? 6 : (build.skills['trickster/burning-scythe'] ?? 0)
-  const magicElKey = isDm ? 'fire' : lower(elem.v)
+  // only with a Neutral weapon: an element from gear (Umbral Stars Shield: Water) reads its own element's bonus
+  // (Umbral Stars Pendant "Water-element magic damage") [2026-10-03]
+  const dmFire = isDm && elem.v === 'Neutral'
+  const magicElKey = dmFire ? 'fire' : lower(elem.v)
   const magicEl = (sc.magic_dmg?.[magicElKey] ?? 0) + burning
   // "Magic vs Medium +5%", "Magic DMG vs all sizes +5%": bMagicAddSize, its own category that multiplies with the
   // element one (battle_calc_cardfix BF_MAGIC: race × element × atk element × size × class) [emu]
@@ -102,7 +105,7 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
     { label: 'MATK', mult: sheet.matk.v, why: sheet.matk.from.join(' · ') },
     { label: 'skill %', mult: skillMult, why: sheet.skillPct ? `${sheet.skillPct.v.toFixed(0)}%` : 'no skill' },
     { label: 'skillboost', mult: 1 + boost / 100, why: `${boost}% skill damage (cards, weapon, shadow)` },
-    { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${isDm ? 'Fire' : elem.v} magic damage${isDm ? ' (Dark Messenger reads Fire Magic with any weapon element [measured 2026-10-03])' : ''}${burning ? ` (${burning}% from Burning Scythe${isDm ? ' [measured]' : ' [emu]'})` : ''}` },
+    { label: 'magic damage', mult: 1 + (magicAll + magicEl) / 100, why: `${magicAll}% magic damage + ${magicEl}% ${dmFire ? 'Fire' : elem.v} magic damage${dmFire ? ' (Dark Messenger with a Neutral weapon reads Fire Magic [measured 2026-10-03])' : ''}${burning ? ` (${burning}% from Burning Scythe${isDm ? ' [measured]' : ' [emu]'})` : ''}` },
     ...(magicPools !== 1 ? [{ label: 'race/element/boss pools', mult: magicPools, why: `race ${magicRace}% × element ${magicTgtEle}% × ${mob.mvp ? 'boss' : 'non-boss'} ${magicClass}% vs ${mob.race} ${mob.element} ("DMG vs X" is physical and magic; "Attack vs X" is physical only) [emu]` }] : []),
     ...(magicSize ? [{ label: 'magic vs size', mult: 1 + magicSize / 100, why: `${magicSize}% magic damage vs ${mob.size} (multiplies with the element category, battle_calc_cardfix) [emu]` }] : []),
     { label: 'target MDEF', mult: mdefCut, why: `MDEF ${mob.mdef}: (1000 + MDEF) / (1000 + 10 × MDEF), soft MDEF ignored [emu, simplified]` },
