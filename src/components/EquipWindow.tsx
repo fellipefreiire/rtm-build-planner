@@ -155,6 +155,8 @@ export default function EquipWindow(props: Props) {
             <div>{props.build.cls}</div>
             <div>base {props.build.baseLv}</div>
           </div>
+          {/* ammo: below the class panel, in the Secondary tab (Fan of Knives and Flying Knife read its ATK) */}
+          {tab === 'secondary' && <Slot id="ammo" {...props} lock={locks.ammo} />}
         </div>
         {col(layout.right)}
       </div>

@@ -296,6 +296,9 @@ const thiefBuffMods: ClassRules['buffMods'] = (_t, c) => {
   if (lv('thief/improve-defense')) out.push({ key: 'hp', value: lv('thief/improve-defense') * base, pct: false, label: 'Improve Defense' })
   if (lv('thief/improve-wisdom')) out.push({ key: 'sp', value: 2 * lv('thief/improve-wisdom') * Math.floor(base / 3), pct: false, label: 'Improve Wisdom' })
   if (lv('unchained-thief/shadow-mastery')) out.push({ key: 'aspd', value: lv('unchained-thief/shadow-mastery'), pct: true, label: 'Shadow Mastery' })
+  // Gadget Mastery: "Bonus is 10+5 SP and 1 INT per level" [db]. The INT is confirmed in-game 2026-10-03 (Lv10: INT
+  // 1 + 14 with +4 from gear; MATK and MDEF base +16 and +10 match). The SP part is ambiguous and not modeled yet
+  if (lv('unchained-thief/gadget-mastery')) out.push({ key: 'int', value: lv('unchained-thief/gadget-mastery'), pct: false, label: 'Gadget Mastery' })
   return out
 }
 // Thief line buffs (texts of today) [db]
