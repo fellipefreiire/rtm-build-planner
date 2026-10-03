@@ -48,13 +48,14 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
   const forced = sheet.endowChoices.find((c) => c.forced)
   if (forced) elem = { v: forced.el, from: forced.label }
   else for (const c of sheet.endowChoices) if (elMult(c.el) > elMult(elem.v)) elem = { v: c.el, from: c.label }
-  const elemAtk = elMult(elem.v)
+  // Fan of Knives: "Ignores defense, flee and elements" [db]
+  const elemAtk = sheet.ignoreDefEle ? 1 : elMult(elem.v)
   const penEff = penEffect(sheet.defPen.v)
   const mobDefLeft = mob.def * (1 - penEff)
-  const defCut = mobHardDef(mobDefLeft)
+  const defCut = sheet.ignoreDefEle ? 1 : mobHardDef(mobDefLeft)
   // soft DEF (level + VIT/2) is subtracted per hit; penetration read as also cutting it [estimated]
   const mobVit = mob.stats?.[2] ?? 0
-  const softDef = mobSoftDef(mob.lv, mobVit) * (1 - penEff)
+  const softDef = sheet.ignoreDefEle ? 0 : mobSoftDef(mob.lv, mobVit) * (1 - penEff)
   // size penalty on the weapon part of the ATK only [emu]
   const sizePct = sizeFix(sheet.weaponType, mob.size)
   const sizeMult = sheet.atk.v > 0 ? 1 - sheet.weaponSizePart * (1 - sizePct / 100) / sheet.atk.v : 1
@@ -94,9 +95,9 @@ export function simulate(build: Build, sheet: StatSheet, mob: Mob): Encounter {
     { label: ranged ? 'ranged' : 'melee', mult: 1 + melee / 100, why: ranged ? `${melee}% ranged damage (skill range ≥ 4: melee bonuses do not apply)` : `${melee}% melee damage` },
     { label: 'critical', mult: critAvg, why: `${(critChance * 100).toFixed(0)}% chance (${sheet.critRate.v >= CRIT_CAP ? `crit ${sheet.critRate.v.toFixed(1)} ≥ ${CRIT_CAP}: always` : `crit ${sheet.critRate.v.toFixed(1)} − target LUK ${mobLuk}/5`}) × (1.4 + ${sheet.critDmg.v}% crit damage)` },
     { label: 'race/size/element pools', mult: poolMult, why: `race ${poolRace}% × size ${poolSize}% × element ${poolEle}% × ${mob.mvp ? 'boss' : 'non-boss'} ${poolClass}% × any ${poolAny}% vs ${mob.race} ${mob.size} ${mob.element} (each category multiplies)` },
-    { label: 'target DEF after pen', mult: defCut, why: `DEF ${mob.def} − pen ${sheet.defPen.v} (${(penEff * 100).toFixed(0)}%) → ${mobDefLeft.toFixed(0)}: (4000 + DEF) / (4000 + 10 × DEF) [emu]` },
+    { label: 'target DEF after pen', mult: defCut, why: sheet.ignoreDefEle ? 'ignored by the skill ("Ignores defense, flee and elements") [db]' : `DEF ${mob.def} − pen ${sheet.defPen.v} (${(penEff * 100).toFixed(0)}%) → ${mobDefLeft.toFixed(0)}: (4000 + DEF) / (4000 + 10 × DEF) [emu]` },
     { label: 'target soft DEF', mult: 1, why: '' },
-    { label: 'weapon element', mult: elemAtk, why: `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
+    { label: 'weapon element', mult: elemAtk, why: sheet.ignoreDefEle ? 'ignored by the skill ("Ignores defense, flee and elements") [db]' : `${elem.v} (${elem.from}) vs ${mob.element} ${mob.elv}${sheet.elementBonus[elem.v] ? ` · +${sheet.elementBonus[elem.v]}% Venom Mark` : ''}` },
   ]
   // soft DEF: a flat cut per hit, shown as the multiplier it is on this hit
   const softIdx = layers.findIndex((l) => l.label === 'target soft DEF')

@@ -72,13 +72,54 @@ const perLv = (c: PassiveCtx, key: string, each: number, label: string, why: str
   return lv > 0 ? [{ label: `${label} Lv${lv}`, value: each * lv, prov: 'db', why }] : []
 }
 
+// Hallucination Walk (Unchained Thief and Assassin trees, same text): "Flee bonus is 10 per lv"; Fan of Knives gains
+// AGI per Improve Dodge level and Shadow Slash +5% per Improve Dodge level while it is up [db]. 50 s / CD 120 s at Lv5
+const HW_KEYS = ['unchained-thief/hallucination-walk', 'assassin/hallucination-walk']
+const HW_BUFFS: Toggle[] = HW_KEYS.map((skill) => ({
+  id: 'hallucinationWalk', skill, label: 'Hallucination Walk', default: true,
+  why: 'FLEE +10/level; Fan of Knives + AGI × Improve Dodge level to its ATK; Shadow Slash +5% per Improve Dodge level. 50 s / CD 120 s at Lv5 (41.7% uptime) [db; uptime measured 2026-09-18]. Needs a Shadow Orb.',
+}))
+const hwLv = (skills: Record<string, number>) => Math.max(...HW_KEYS.map((k) => skills[k] ?? 0))
+const hwMods = (t: Record<string, boolean>, c?: { skills: Record<string, number> }): BuffMod[] => {
+  const lv = c ? hwLv(c.skills) : 0
+  return t.hallucinationWalk && lv ? [{ key: 'flee', value: 10 * lv, pct: false, label: 'Hallucination Walk' }] : []
+}
+/** Shadow Slash: "Damage increases by 5% per Improve Dodge level while under Hallucination Walk" [db] */
+const hwShadowSlash = ({ toggles, skillKey, skills }: RuleCtx): Extra[] => {
+  if (!toggles.hallucinationWalk || !/\/shadow-slash$/.test(skillKey ?? '') || !hwLv(skills)) return []
+  const id = skills['thief/improve-dodge'] ?? 0
+  return id ? [{ label: `Hallucination Walk: Improve Dodge Lv${id}`, value: 5 * id, prov: 'db', why: '+5% per Improve Dodge level while under Hallucination Walk' }] : []
+}
+
+/**
+ * Fan of Knives ATK, measured in-game on 2026-09-18 (base/servidor/fan-of-knives.md): status ATK once + the right-hand
+ * weapon's own ATK + ammo ATK, then the ATK% (percentages multiply). Flat ATK from gear, runes and cards gives 0
+ * (rune ATK +5 = same damage); refine and mastery are not counted [not measured]. "Ignores defense, flee and
+ * elements" [db]. Under Hallucination Walk: + AGI × Improve Dodge level, read as added to the same pool [estimated:
+ * the form is not measured yet].
+ */
+export function fanOfKnivesAtk(c: RuleCtx & { statusAtk: number; weaponAtk: number; ammoAtk: number }): { pool: number; parts: string[] } | null {
+  if (!/\/fan-of-knives$/.test(c.skillKey ?? '')) return null
+  const id = c.skills['thief/improve-dodge'] ?? 0
+  const hw = c.toggles.hallucinationWalk && hwLv(c.skills) ? c.stats.agi * id : 0
+  return {
+    pool: c.statusAtk + c.weaponAtk + c.ammoAtk + hw,
+    parts: [
+      `Fan of Knives: status ATK ${c.statusAtk} (once)`, `right weapon ${c.weaponAtk}`, `ammo ${c.ammoAtk}`,
+      hw ? `Hallucination Walk: AGI ${c.stats.agi} × Improve Dodge ${id} = ${hw} [estimated form]` : '',
+      'flat ATK from gear/refine/mastery not counted [measured 2026-09-18]',
+    ],
+  }
+}
+
 const GENERIC = (name: string): ClassRules => ({
   name,
   calibrated: false,
   toggles: [],
-  simBuffs: [],
-  buffMods: () => [],
-  skillPctExtra: () => [],
+  // only shows when the skill is learned (Assassin, Night Raven)
+  simBuffs: HW_BUFFS,
+  buffMods: hwMods,
+  skillPctExtra: hwShadowSlash,
   shield: () => null,
   passives: () => ({}),
   innate: null,
@@ -256,6 +297,7 @@ const THIEF_LINE_BUFFS: Toggle[] = [
   { id: 'fury', skill: 'unchained-thief/fury', label: 'Fury', default: false, why: 'CRIT +1/level (doubled with Katars); Sonic Blow and Impact Tooth base damage +50%. Needs a Shadow Orb. [db]' },
   { id: 'cloaking', skill: 'unchained-thief/cloaking', label: 'Cloaking', default: false, why: 'CRIT +3/level while cloaked. [db]' },
   { id: 'morrocsMark', skill: 'orphan/morroc-s-mark', label: "Morroc's Mark", default: false, why: 'All Stats +10% for 10 s (read as 10% of the base stats) [estimated]; 60 min cooldown (Unbound Gem cuts it). [db]' },
+  HW_BUFFS[0],
 ]
 const thiefLineMods = (t: Record<string, boolean>, c?: { skills: Record<string, number>; stats: Record<StatKey, number> }): BuffMod[] => {
   if (!c) return []
@@ -296,8 +338,8 @@ const backStabDagger = ({ stats, skillKey, skillLv, skills, weaponType, dualWiel
 const THIEF: ClassRules = {
   ...GENERIC('Thief'), passives: thiefPassives,
   simBuffs: THIEF_LINE_BUFFS,
-  buffMods: (t, c) => [...thiefBuffMods(t, c), ...thiefLineMods(t, c)],
-  skillPctExtra: backStabDagger,
+  buffMods: (t, c) => [...thiefBuffMods(t, c), ...thiefLineMods(t, c), ...hwMods(t, c)],
+  skillPctExtra: (c) => [...backStabDagger(c), ...hwShadowSlash(c)],
   endows: thiefEndows,
   // HIT: status window 2026-10-02 (lv36, DEX 27, LUK 5, +14 HIT from a random option) showed 305 against 280 from the formula
   innate: { ...INNATE, why: 'HIT +25 measured in-game 2026-10-02 (305 against 280), as on Revenant; HP ×1.10 [estimated] not measured yet' },
@@ -321,6 +363,7 @@ const PHANTOM_THIEF: ClassRules = {
   skillPctExtra: (c) => {
     const { stats, toggles, skillKey } = c
     if (skillKey === 'thief/back-stab') return backStabDagger(c)
+    if (/\/shadow-slash$/.test(skillKey ?? '')) return hwShadowSlash(c)
     const n = Array.from({ length: 10 }, (_, i) => i + 1).find((k) => toggles[`duelCounters:lv${k}`]) ?? 0
     if (!toggles.duelCounters || !n) return []
     if (skillKey === 'phantom-thief/delta-skyfall') {
@@ -334,7 +377,7 @@ const PHANTOM_THIEF: ClassRules = {
   },
   elementBonus: (t, skills): Record<string, number> => (t.venomMark && skills['phantom-thief/venom-mark'] ? { Poison: 5 * skills['phantom-thief/venom-mark'] } : {}),
   buffMods: (t, c) => {
-    const out = [...thiefBuffMods(t, c), ...thiefLineMods(t, c)]
+    const out = [...thiefBuffMods(t, c), ...thiefLineMods(t, c), ...hwMods(t, c)]
     const lv = c?.skills['phantom-thief/ready-to-rip'] ?? 0
     if (t.readyToRip && lv) {
       out.push(

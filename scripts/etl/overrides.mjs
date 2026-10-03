@@ -131,6 +131,13 @@ export const SKILL_OVERRIDES = {
     desc: [['Damage is fixed based on ATK and Str.', 'Damage is 0+0% per level.']],
     why: '"Damage is fixed based on ATK and Str." has no number; 0% keeps the skill in the rotation with its 7 s cooldown and SP cost [in-game 2026-10-01]',
   },
+  // Fan of Knives: the text gives no %, so the skill never reached the Simulator. 92%/level comes from the in-game
+  // reading of 2026-09-18 (+1 status ATK = +12 damage, with Tendrillion's +30%: 12 / 1.3 ≈ 9.2 at Lv10) [estimated].
+  // The ATK pool (status + right weapon + ammo, Hallucination Walk) and the ignored DEF/element are in rules/classes.ts
+  ...Object.fromEntries(['assassin/fan-of-knives', 'unchained-thief/fan-of-knives'].map((k) => [k, {
+    desc: [['Damage is completely boosted by raw ATK', 'Damage is 0+92% per level']],
+    why: 'FoK text has no damage %; 92%/level estimated from the 2026-09-18 reading (+12 damage per status ATK with Tendrillion) [in-game, estimated]',
+  }])),
 }
 
 /**

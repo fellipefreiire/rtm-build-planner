@@ -4,7 +4,7 @@ import {
   UnparsedEffect, qty, weakest,
   accessorySideOk,
 } from '@/lib/types'
-import { ClassRules, Extra } from '@/lib/rules/classes'
+import { ClassRules, Extra, fanOfKnivesAtk } from '@/lib/rules/classes'
 import {
   CRIT_BASE, aspd as aspdOf, maxHpSp, baseCrit, baseFlee, baseHit, basePerfectDodge,
   emuJob, emuWeaponType, pointBudget, softDef, softMdef, statCostTotal, statusAtk, statusMatk,
@@ -75,6 +75,8 @@ export type StatSheet = {
   elementBonus: Record<string, number>
   /** flat damage added after every multiplier (Soul Destroyer's second part) */
   skillFlat: number
+  /** the skill ignores the target's DEF and element (Fan of Knives: "Ignores defense, flee and elements") [db] */
+  ignoreDefEle: boolean
   /** weapon type in the emulator, and the part of the ATK the size penalty cuts (weapon ATK × (1 + STR/200) × ATK%) */
   weaponType: string
   weaponSizePart: number
@@ -532,6 +534,10 @@ export function computeSheet(
     weaponType: wType, dualWield: !!offEq && offEq.item.grp === 'Weapon',
   }
 
+  // Fan of Knives has its own ATK pool (status + right weapon + ammo, Hallucination Walk) [measured 2026-09-18]
+  const ammoAtk = equipped.find((e) => e.slot === 'ammo')?.item.atk ?? 0
+  const fok = fanOfKnivesAtk({ ...ctx, statusAtk: sAtk, weaponAtk, ammoAtk })
+
   // ---- skill % ----
   let skillPct: Qty | null = null
   const skillParts: Extra[] = []
@@ -589,7 +595,9 @@ export function computeSheet(
     },
     totals,
     equipped,
-    atk: qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', atkFromFlee ? `${atkFromFlee} from FLEE (Maiden of Time)` : '', `${pct('atk')}%`),
+    atk: fok
+      ? qty(fok.pool * (1 + pct('atk') / 100), 'derived', ...fok.parts, `${pct('atk')}%`)
+      : qty(atkRaw, 'emu', `status ATK ${sAtk} × 2`, `weapon ${weaponAtk} × (1 + STR/200) + refine ${refineAtk}`, `mastery ${mastery}`, `gear ${flat('atk')}`, atkFromDef ? `${atkFromDef} from DEF (End of Kings)` : '', atkFromFlee ? `${atkFromFlee} from FLEE (Maiden of Time)` : '', `${pct('atk')}%`),
     matk: qty((sMatk + weaponMatk + refineAtk + flat('matk') + matkFromMdef) * (1 + pct('matk') / 100), 'emu', `status MATK ${sMatk}`, `weapon ${weaponMatk} + refine ${refineAtk}`, `gear ${flat('matk')}`, matkFromMdef ? `${matkFromMdef} from MDEF` : '', `${pct('matk')}%`),
     def: qty(defTotal + defFromAtk, 'derived', 'gear DEF + mods', defFromAtk ? `${defFromAtk} from ATK (Heir to the King)` : ''),
     mdef: qty(mdefTotal + mdefFromMatk, 'derived', 'gear MDEF + mods', mdefFromMatk ? `${mdefFromMatk} from MATK (Heir to the King)` : ''),
@@ -621,7 +629,8 @@ export function computeSheet(
     endowChoices: weaponElement.from === 'no item grants an element' && !skill?.damage?.magic ? (rules.endows?.(toggles, build.skills) ?? []) : [],
     elementBonus: rules.elementBonus?.(toggles, build.skills) ?? {},
     weaponType: wType,
-    weaponSizePart: weaponAtk * (1 + stats.str / 200) * (1 + pct('atk') / 100),
+    weaponSizePart: weaponAtk * (fok ? 1 : 1 + stats.str / 200) * (1 + pct('atk') / 100),
+    ignoreDefEle: !!fok,
     skillFlat: skill?.damage?.miscPart ? skill.damage.miscPart.base + skill.damage.miscPart.perLvInt * (ctxSkillLv || 1) * stats.int : 0,
     weaponWarning: skillWeaponWarning(skill, wType),
     unparsed,
