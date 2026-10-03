@@ -405,8 +405,9 @@ export function computeSheet(
   }
   const weaponElement = (() => {
     const e = pickEl(['weapon', 'shadowGloves', 'offhand', 'ammo'], 'endow', build.weaponElement)
-    // Burning Scythe only applies when no item already grants an element
-    return e.from === 'no item grants an element' && toggles.burningScythe ? { v: 'Fire', from: 'Burning Scythe' } : e
+    // Burning Scythe overrides any item element (weapon card, weapon, shadow gloves) [player report 2026-10-03]: a skill
+    // endow (SC_FIREWEAPON) replaces the weapon element in the emulator too (status_calc_attack_element) [emu]
+    return toggles.burningScythe ? { v: 'Fire', from: 'Burning Scythe' } : e
   })()
   const armorElement = pickEl(['armor', 'offhand'], 'armorEl', build.armorElement)
 

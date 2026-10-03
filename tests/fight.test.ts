@@ -57,11 +57,14 @@ describe('Simulator buffs', () => {
     expect(withIt.stats.luk - without.stats.luk).toBe(8)
     expect(withIt.skillPct!.v - without.skillPct!.v).toBe(2 * withIt.stats.dex + 2 * 8)
   })
-  it('Burning Scythe only applies without an item endow', () => {
+  it('Burning Scythe overrides the element from items (weapon, shadow gloves) [player report 2026-10-03]', () => {
     const noWeapon = { ...b, slots: { ...b.slots } }
     delete noWeapon.slots.weapon
     delete noWeapon.slots.shadowGloves
     expect(computeSheet(noWeapon, byId, roar, r, { burningScythe: true }).weaponElement.v).toBe('Fire')
+    const endowed = computeSheet(b, byId, roar, r, {}).weaponElement
+    expect(endowed.from).not.toBe('no item grants an element')
+    expect(computeSheet(b, byId, roar, r, { burningScythe: true }).weaponElement).toEqual({ v: 'Fire', from: 'Burning Scythe' })
   })
 })
 

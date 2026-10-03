@@ -151,7 +151,7 @@ const scytheMastery = (c: PassiveCtx) => {
 /** Trickster buffs, shared by Revenant. */
 const TRICKSTER_BUFFS: Toggle[] = [
   { id: 'trueSight', skill: 'trickster/true-sight', label: 'True Sight', default: false, why: 'All Stats +3; Hit and Crit +3 per level (crit before the ×1.15 from Baphomet Jr.). 60 s / CD 80 s = 75%. [db]' },
-  { id: 'burningScythe', skill: 'trickster/burning-scythe', label: 'Burning Scythe', default: false, why: 'Fire endow on the weapon, only when no item already grants an element.' },
+  { id: 'burningScythe', skill: 'trickster/burning-scythe', label: 'Burning Scythe', default: false, why: 'Fire endow on the weapon; overrides the element from items (weapon card, weapon, shadow gloves) [player report 2026-10-03].' },
 ]
 
 /** "Increases all stats by 3 for duration. Increases hit by 3 and crit by 3 per level." [db] */
