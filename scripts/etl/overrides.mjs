@@ -47,6 +47,10 @@ export const ITEM_OVERRIDES = {
     ],
     why: 'the set text ("Adds ATK equal to 10% of your total DEF", "DEF +1% and Soft DEF +1%" per total set refine) and the boots piece ("Neutral damage reduction from all sizes") rewritten in the parser format; "total DEF" read as the equipment DEF the engine shows [db, estimated reading]',
   }])),
+  'Spectral Reaper': {
+    desc: [['Burning Wave DMG+5% per refine', 'Flaming Wave DMG+5% per refine']],
+    why: '"Burning Wave" is the old name of Flaming Wave (no skill is called Burning Wave); it never matched the skill [db, player report 2026-10-03]',
+  },
   'Valhalla Knight Card': {
     desc: [['raises your MaxHP limit by 5,000', 'MaxHP Limit +5000']],
     why: 'the comma in "5,000" split the line; the effect is MaxHP ceiling +5,000 with two copies [db]',

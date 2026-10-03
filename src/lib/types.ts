@@ -152,6 +152,8 @@ export type SkillFormula = {
   /** second damage part added after everything, ignoring element and DEF: base + perLvInt × level × INT
    *  (Soul Destroyer: battle.cpp ASC_BREAKER md.damage = 50 + rnd()%50 + 5 × lv × INT) [emu] */
   miscPart?: { base: number; perLvInt: number }
+  /** fixed skill element from the site ("Fire" for Flaming Wave); absent = the weapon's element */
+  element?: string
 }
 
 export type Skill = {

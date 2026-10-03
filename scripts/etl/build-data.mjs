@@ -296,6 +296,12 @@ function main() {
     // 2026-10-02: classic spells the parser read as physical ("Weapon-Based elemental damage" in Comet's text);
     // magic both in the emulator's skill_db (Type: Magic) and in the site's magic group (kind 2)
     if (f && MAGIC_SPELLS.has(s.icon)) f.magic = true
+    // 2026-10-03: the site tags magic skills ("magic" in the tag list): Flaming Wave, Dragon Breath, Arcana of Destiny and
+    // Illusion of Mist were read as physical because their text never says MATK [db]
+    if (f && Array.isArray(s.bonuswhy) && s.bonuswhy.includes('magic')) f.magic = true
+    // 2026-10-03: fixed skill element from the site (Flaming Wave Fire, Frost Diver Water, Conflagration Dark); "Your
+    // weapon's element" or none = the weapon's. It used to be ignored: every skill took the weapon element [db]
+    if (f && typeof s.elem === 'string' && ['Neutral', 'Water', 'Earth', 'Fire', 'Wind', 'Poison', 'Holy', 'Dark', 'Ghost', 'Undead'].includes(s.elem)) f.element = s.elem
     // Soul Destroyer adds a second part: 50 + rnd(50) + 5 × level × INT, no element, no DEF (battle.cpp ASC_BREAKER) [emu]
     if (f && s.icon === 'ASC_BREAKER') f.miscPart = { base: 75, perLvInt: 5 }
     const type = TYPES[s.type] ?? null

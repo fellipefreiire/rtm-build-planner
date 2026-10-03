@@ -148,6 +148,25 @@ describe('Dark Messenger element bonus', () => {
   })
 })
 
+describe('Flaming Wave', () => {
+  it('is magic and Fire (site tags); Spectral Reaper "Burning Wave DMG +5% per refine" raises it', () => {
+    const fw = skillMap.get('revenant/flaming-wave')!
+    expect(fw.damage).toMatchObject({ magic: true, element: 'Fire' })
+    const b = JSON.parse(readFileSync(new URL('./fixtures-data/revenant-dark-messenger-2026-10-03.json', import.meta.url), 'utf8')) as Build
+    b.skills['revenant/flaming-wave'] = 10
+    const run = (refine: number) => {
+      const bb = { ...b, skillKey: fw.key, slots: { ...b.slots, weapon: { id: find('Spectral Reaper').id, refine, cards: [] } } }
+      const sh = computeSheet(bb, byId, fw, rulesFor('Revenant'), {})
+      return { sh, e: simulate(bb, sh, mobBy('Average Dummy')) }
+    }
+    const { sh, e } = run(9)
+    expect(sh.weaponElement.v).toBe('Fire')
+    expect(e.layers.find((l) => l.label === 'skillboost')!.mult).toBeCloseTo(1.45, 6)
+    expect(e.layers.find((l) => l.label === 'MATK')).toBeTruthy()
+    expect(run(9).e.index / run(0).e.index).toBeGreaterThan(1.4)
+  })
+})
+
 describe('Magic vs size', () => {
   it('"Magic vs Medium +5%" and "Magic DMG vs all sizes +5%" are bMagicAddSize, not plain magic damage', () => {
     expect(find('Follower Ring').mods.filter((m) => m.key === 'magic_vs_size').map((m) => m.scope?.size).sort()).toEqual(['large', 'medium', 'small'])
