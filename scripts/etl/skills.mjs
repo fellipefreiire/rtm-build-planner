@@ -29,7 +29,7 @@ const pctOf = (re, text) => { const m = re.exec(text); return m ? num(m.groups.n
 export function parseSkillFormula(desc) {
   const text = String(desc || '')
   const m = RE.coef.exec(text)
-  if (!m) return null
+  if (!m) return parseBolt(text)
   // the line with the formula, not the first "damage is" (Dark Message: "Damage is very small…" comes first)
   const lines = text.split('\n')
   const line = lines.find((l) => RE.coef.test(l)) || lines.find((l) => /damage is/i.test(l)) || ''
@@ -55,5 +55,40 @@ export function parseSkillFormula(desc) {
     castFixed: RE.castFixed.test(text) ? num(RE.castFixed.exec(text).groups.n) : 0,
     magic: RE.magic.test(text),
     formulaRaw: line.trim(),
+  }
+}
+
+// 2026-10-10: Thief bolts (Flaming Petals, Freezing Spear, Wind Blade) had no formula and were missing from the
+// palette: "Inflicts 50% MATK Fire magic damage per Hit / Hit amount increases by 1 per level", so 50% × level in total.
+// Cast and cooldown grow with level: "Variable cast time increases with level: 0.25s to 7s", "Cooldown is 0.5+0.25s per level"
+const BOLT = {
+  hit: new RegExp(String.raw`inflicts\s+(?<n>${N})%\s+matk\b[^\n]*per\s+hit`, 'i'),
+  hits: /hit amount increases by 1 per level/i,
+  cast: (kind) => new RegExp(String.raw`${kind}\s+cast\s+time\s+increases\s+with\s+level:\s*(?<a>${N})s?\s+to\s+(?<b>${N})\s*s`, 'i'),
+  cooldown: new RegExp(String.raw`cooldown\s+is\s+(?<a>${N})\s*s?\s*\+\s*(?<b>${N})\s*s\s+per\s+level`, 'i'),
+}
+const range = (re, text) => { const m = re.exec(text); return m ? [num(m.groups.a), num(m.groups.b)] : null }
+
+function parseBolt(text) {
+  const m = BOLT.hit.exec(text)
+  if (!m || !BOLT.hits.test(text)) return null
+  const cd = range(BOLT.cooldown, text)
+  return {
+    base: 0,
+    coefPerLevel: num(m.groups.n),
+    perStat: [],
+    // cooldown at Lv L = a + b × L
+    cooldown: cd ? cd[0] : null,
+    cooldownPerLevel: cd ? cd[1] : undefined,
+    spPct: null,
+    hpPct: null,
+    canCrit: false,
+    castVar: 0,
+    castFixed: 0,
+    // Lv 1 to max level, linear in between (the text only gives the two ends) [db]
+    castVarRange: range(BOLT.cast('variable'), text) ?? undefined,
+    castFixedRange: range(BOLT.cast('fixed'), text) ?? undefined,
+    magic: true,
+    formulaRaw: text.split('\n').slice(0, 2).join(' / ').trim(),
   }
 }

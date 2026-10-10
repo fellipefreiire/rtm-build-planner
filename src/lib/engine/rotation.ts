@@ -299,7 +299,11 @@ export function runRotation(i: RotationInput): RotationResult {
     }
 
     const vct = (sheetNow.totals.pct.cast_time ?? 0) + (sheetNow.totals.flat.cast_time ?? 0)
-    const cast = ((d?.castVar ?? 0) * Math.max(0, 1 + vct / 100) + (d?.castFixed ?? 0)) * CAST_RATE
+    // cast that grows with level (Thief bolts): linear between Lv 1 and the max level [db]
+    const atLv = (r: [number, number] | undefined, flat: number) =>
+      r ? r[0] + (r[1] - r[0]) * (s.maxLv > 1 ? (lv - 1) / (s.maxLv - 1) : 0) : flat
+    const castVar = atLv(d?.castVarRange, d?.castVar ?? 0), castFixed = atLv(d?.castFixedRange, d?.castFixed ?? 0)
+    const cast = (castVar * Math.max(0, 1 + vct / 100) + castFixed) * CAST_RATE
     const acdPct = (sheetNow.totals.pct.after_cast_delay ?? 0) + (sheetNow.totals.flat.after_cast_delay ?? 0)
     const acdMs = rr.acdMs?.(key, lv) ?? emuAcdMs(s.icon, lv) ?? 0
     const acd = acdMs / 1000 * Math.max(0, 150 - sheetNow.stats.agi) / 150 * Math.max(0, 1 + acdPct / 100) * DELAY_RATE
@@ -307,7 +311,7 @@ export function runRotation(i: RotationInput): RotationResult {
     const delay = Math.max(MIN_DELAY, acd, amotion)
     const end = start + cast + delay
     const cdMods = skillBonus(sheetNow.totals.scoped.skill_cooldown, s.name)
-    ready.set(key, start + Math.max(0, (d?.cooldown ?? 0) + cdMods))
+    ready.set(key, start + Math.max(0, (d?.cooldown ?? 0) + (d?.cooldownPerLevel ?? 0) * lv + cdMods))
 
     events.push({
       skill: key, name: s.name, lv, start, end, comboReady: cr, finisherReady: fr,

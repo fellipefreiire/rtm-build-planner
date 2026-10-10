@@ -1,10 +1,12 @@
 // Phantom Thief rules (Master Thief Arts) and the Edge "Double Effect" at +7 — 2026-10-02.
 import { describe, expect, it } from 'vitest'
 import { computeSheet } from '@/lib/engine/sheet'
+import { runRotation } from '@/lib/engine/rotation'
 import { learnedToggles, rulesFor } from '@/lib/rules/classes'
 import { emptyBuild } from '@/lib/build-url'
-import { Build, SlotId } from '@/lib/types'
-import { byId, find, skillBy } from './fixtures'
+import { Build, Skill, SlotId } from '@/lib/types'
+import { byId, find, mobBy, skillBy, skills } from './fixtures'
+import classes from '@/data/classes.json'
 
 const DELTA = 'phantom-thief/delta-skyfall'
 
@@ -121,5 +123,29 @@ describe('Coin Flip coins as Duel Counters (2026-10-02)', () => {
     const none = computeSheet(b, byId, skillBy(DELTA), R, learnedToggles(R, b.skills, {}))
     const five = computeSheet(b, byId, skillBy(DELTA), R, learnedToggles(R, b.skills, { duelCounters: true }, { duelCounters: 5 }))
     expect(five.skillPct!.v - none.skillPct!.v).toBe(2 * five.stats.vit)
+  })
+})
+
+describe('Thief bolts (2026-10-10)', () => {
+  const FP = 'thief/flaming-petals'
+  it('Flaming Petals, Freezing Spear and Wind Blade are in the Thief line palette', () => {
+    const thief = classes.find((c) => c.name === 'Thief')!.damageSkills
+    for (const k of [FP, 'thief/freezing-spear', 'thief/wind-blade']) expect(thief).toContain(k)
+  })
+  it('50% MATK × level, Fire magic; cast and cooldown grow with level', () => {
+    const d = skillBy(FP)!.damage!
+    expect(d).toMatchObject({ base: 0, coefPerLevel: 50, magic: true, element: 'Fire', cooldown: 0.5, cooldownPerLevel: 0.25 })
+    const b = build('Phantom Thief', [], { [FP]: 10 })
+    b.stats.int = 90
+    const skillMap = new Map<string, Skill>(skills.map((s) => [s.key, s]))
+    const run = (lv: number) => runRotation({
+      build: b, byId, steps: [FP, FP], levels: { [FP]: lv }, skills: skillMap, rules: rulesFor('Phantom Thief'),
+      toggles: {}, food: null, mob: mobBy('Average Dummy'), k: null,
+    }).events
+    const [l1, l10] = [run(1), run(10)]
+    expect(l1[0].damage).toBeGreaterThan(0)
+    expect(l10[0].damage / l1[0].damage).toBeCloseTo(10, 0)
+    // the 2nd cast waits for the cooldown: 0.75 s at Lv 1, 3 s at Lv 10
+    expect(l10[1].start - l10[0].start).toBeGreaterThan(l1[1].start - l1[0].start)
   })
 })

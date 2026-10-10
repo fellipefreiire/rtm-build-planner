@@ -149,6 +149,10 @@ export type SkillFormula = {
   canCrit: boolean; magic: boolean; formulaRaw: string
   /** cast time in seconds (dump text); 0 = instant */
   castVar?: number; castFixed?: number
+  /** cast time that grows with level: [Lv 1, max level], linear in between (Thief bolts) [db] */
+  castVarRange?: [number, number]; castFixedRange?: [number, number]
+  /** cooldown at Lv L = cooldown + cooldownPerLevel × L ("Cooldown is 0.5+0.25s per level") [db] */
+  cooldownPerLevel?: number
   /** second damage part added after everything, ignoring element and DEF: base + perLvInt × level × INT
    *  (Soul Destroyer: battle.cpp ASC_BREAKER md.damage = 50 + rnd()%50 + 5 × lv × INT) [emu] */
   miscPart?: { base: number; perLvInt: number }
